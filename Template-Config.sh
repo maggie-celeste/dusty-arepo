@@ -37,6 +37,17 @@
 #DUST_K
 #DUST_FB
 #DUST_SIZE
+#DUST_RHO_GRAIN
+
+#---------------------------------------- Torque-free sink
+#TORQUE_FREE_SINK              # Turn on sink, centered on the star particle
+
+# The default values for the following parameters are appropriate for a protoplanetary disc of R_in 5AU
+#SINK_RADIUS                   # the radius inside of which sink particles are accreted onto the sink (not set=2AU)
+#INNER_RADIUS                  # the inner edge of the disc -- cells will gradually increase in size between inner_radius and sink_radius, but only be accreted inside sink_radius (see Dempsey et al 2021 for further info) (not set=5AU)
+#NPHI                          # How many cells across the circumference of the INNER EDGE? (not set=1000)
+#ACCRETION_CONSTANT            # the constant used to determine the sink rate, where rate(R=0) = const * omega (not set=10)
+
 
 
 #--------------------------------------- Riemann solver; default: exact Riemann solver
@@ -104,6 +115,8 @@
 #--------------------------------------- External gravity; default: no external potential
 #EXTERNALGRAVITY               # master switch for external potential
 #EXTERNALGY=0.0                # constant external gravity in y direction
+#EXTERNALGX=0.01               # constant external gravity in x direction
+
 
 #--------------------------------------- Static NFW Potential
 #STATICNFW                     # static gravitational Navarro-Frenk-White (NFW) potential

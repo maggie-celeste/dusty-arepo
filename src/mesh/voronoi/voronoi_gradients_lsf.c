@@ -194,13 +194,26 @@ void calculate_gradients(void)
           minvalues[i * N_Grad + k] = +MAX_REAL_NUMBER;
           maxvalues[i * N_Grad + k] = -MAX_REAL_NUMBER;
 
+#ifndef DUST_INCLUDE
           if((grad_elements[k].type == GRADIENT_TYPE_VELX) || (grad_elements[k].type == GRADIENT_TYPE_VELY) ||
              (grad_elements[k].type == GRADIENT_TYPE_VELZ))
             {
               Value[k] = *(MyFloat *)(((char *)(&P[i])) + grad_elements[k].offset) / All.cf_atime;
             }
+
           else
-            Value[k] = *(MyFloat *)(((char *)(&SphP[i])) + grad_elements[k].offset);
+              Value[k] = *(MyFloat *)(((char *)(&SphP[i])) + grad_elements[k].offset);
+#endif /* #ifndef DUST_INCLUDE */
+
+#ifdef DUST_INCLUDE
+            if((grad_elements[k].type == GRADIENT_TYPE_DUST_VELX) || (grad_elements[k].type == GRADIENT_TYPE_DUST_VELY) || 
+                (grad_elements[k].type == GRADIENT_TYPE_DUST_VELZ))
+             {
+               Value[k] = *(MyFloat *)(((char *)(&SphP[i])) + grad_elements[k].offset) / All.cf_atime;
+             }
+            else
+              Value[k] = *(MyFloat *)(((char *)(&SphP[i])) + grad_elements[k].offset);        
+#endif /* #ifdef DUST_INCLUDE */
         }
 
       MyDouble *Center = SphP[i].Center;
@@ -342,6 +355,24 @@ void calculate_gradients(void)
                         ValueOther += norm[2] * dist * All.cf_atime * All.cf_Hrate;
                     }
 
+#ifdef DUST_INCLUDE
+                  if((grad_elements[k].type == GRADIENT_TYPE_DUST_VELX) || (grad_elements[k].type == GRADIENT_TYPE_DUST_VELY) ||
+                     (grad_elements[k].type == GRADIENT_TYPE_DUST_VELZ))
+                    {
+                      ValueOther /= All.cf_atime;
+
+#if defined(REFLECTIVE_X) || defined(REFLECTIVE_Y) || defined(REFLECTIVE_Z)
+                      correct_for_reflective_boundaries(&ValueOther, Value[k], grad_elements[k].type, &Mesh.DP[dp].image_flags);
+#endif /* #if defined(REFLECTIVE_X) || defined(REFLECTIVE_Y) || defined(REFLECTIVE_Z) */
+                      if(grad_elements[k].type == GRADIENT_TYPE_DUST_VELX)
+                        ValueOther += norm[0] * dist * All.cf_atime * All.cf_Hrate;
+                      else if(grad_elements[k].type == GRADIENT_TYPE_DUST_VELY)
+                        ValueOther += norm[1] * dist * All.cf_atime * All.cf_Hrate;
+                      else if(grad_elements[k].type == GRADIENT_TYPE_DUST_VELZ)
+                        ValueOther += norm[2] * dist * All.cf_atime * All.cf_Hrate;
+                    }
+#endif
+
                   double fac = weight * (ValueOther - Value[k]) / dist;
 
                   for(int ia = 0; ia < NUMDIMS; ia++)
@@ -423,7 +454,7 @@ for(int idx = 0; idx < TimeBinsHydro.NActiveParticles; idx++)
           }
       SphP[i].scaleheight = H;
     }
-#endif /* #ifdef LOMBARDI_COOLING */
+#endif /* #ifdef MOD_LOMBARDI_COOLING */
 
   limit_gradients();
 
@@ -487,6 +518,10 @@ void compute_divergences()
       MyFloat *BOther, B[3];
       struct grad_data *GradOther;
 #endif /* #ifdef MHD */
+#if defined(EVALPOTENTIAL)
+      SphP[i].PotentialPeak = 1; /* starts off true */
+      double PotenOther;
+#endif /* #if defined(EVALPOTENTIAL) */
 
       int q = SphP[i].first_connection;
       while(q >= 0)
@@ -552,6 +587,9 @@ void compute_divergences()
                   GradOther = &SphP[particle].Grad;
                   BOther    = SphP[particle].B;
 #endif /* #ifdef MHD */
+#if defined(EVALPOTENTIAL)
+                  PotenOther = P[particle].Potential;
+#endif /* #if defined(EVALPOTENTIAL) */
                 }
               else
                 {
@@ -563,6 +601,9 @@ void compute_divergences()
                   GradOther = &GradExch[particle];
                   BOther    = PrimExch[particle].B;
 #endif /* #ifdef MHD */
+#if defined(EVALPOTENTIAL)
+                  PotenOther = PrimExch[particle].Potential;
+#endif /* #if defined(EVALPOTENTIAL) */
                 }
 
 #ifdef MHD
@@ -634,6 +675,16 @@ void correct_for_reflective_boundaries(double *ValueOther, double Value, int typ
       if((*image_flags & REFL_X_FLAGS) && (*image_flags & OUTFLOW_X))
         *ValueOther = Value;
     }
+#ifdef DUST_INCLUDE
+  if(type == GRADIENT_TYPE_DUST_VELX)
+    {
+      if((*image_flags & REFL_X_FLAGS) && !(*image_flags & OUTFLOW_X))
+        *ValueOther *= -1;
+      if((*image_flags & REFL_X_FLAGS) && (*image_flags & OUTFLOW_X))
+        *ValueOther = Value;
+    }
+#endif /* #ifdef DUST_INCLUDE */
+
 #endif /* #if defined(REFLECTIVE_X) */
 
 #if defined(REFLECTIVE_Y)
@@ -644,7 +695,19 @@ void correct_for_reflective_boundaries(double *ValueOther, double Value, int typ
       if((*image_flags & REFL_Y_FLAGS) && (*image_flags & OUTFLOW_Y))
         *ValueOther = Value;
     }
+#ifdef DUST_INCLUDE
+  if(type == GRADIENT_TYPE_DUST_VELY)
+    {
+      if((*image_flags & REFL_Y_FLAGS) && !(*image_flags & OUTFLOW_Y))
+        *ValueOther *= -1;
+      if((*image_flags & REFL_Y_FLAGS) && (*image_flags & OUTFLOW_Y))
+        *ValueOther = Value;
+    }
+#endif /* #ifdef DUST_INCLUDE */
+
 #endif /* #if defined(REFLECTIVE_Y) */
+
+
 
 #if defined(REFLECTIVE_Z)
   if(type == GRADIENT_TYPE_VELZ)
@@ -654,6 +717,16 @@ void correct_for_reflective_boundaries(double *ValueOther, double Value, int typ
       if((*image_flags & REFL_Z_FLAGS) && (*image_flags & OUTFLOW_Z))
         *ValueOther = Value;
     }
+#ifdef DUST_INCLUDE
+  if(type == GRADIENT_TYPE_DUST_VELZ)
+    {
+      if((*image_flags & REFL_Z_FLAGS) && !(*image_flags & OUTFLOW_Z))
+        *ValueOther *= -1;
+      if((*image_flags & REFL_Z_FLAGS) && (*image_flags & OUTFLOW_Z))
+        *ValueOther = Value;
+    }
+#endif /* #ifdef DUST_INCLUDE */
+
 #endif /* #if defined(REFLECTIVE_Z) */
 }
 
@@ -675,24 +748,37 @@ void limit_gradients(void)
       for(int j = 0; j < 2; j++)
         {
           point *p;
+          point *p_other;
           if(j == 0)
             {
               p = &DP[VF[i].p1];
+              p_other = &DP[VF[i].p2];
             }
           else
             {
               p = &DP[VF[i].p2];
+              p_other = &DP[VF[i].p1];
             }
 
           if(p->task == ThisTask && p->index >= 0 && p->index < NumGas)
             {
               int q = p->index;
+              int q_other = p_other->index;
+
               if(TimeBinSynchronized[P[q].TimeBinHydro])
                 {
                   double d[3];
-                  d[0] = VF[i].cx - SphP[q].Center[0];
-                  d[1] = VF[i].cy - SphP[q].Center[1];
-                  d[2] = VF[i].cz - SphP[q].Center[2];
+                  // MAGGIE: I have changed this part of the slope limiter to match Zier & Volkerspringel 2022.
+                  // Here, instead of using distance from face -> center, use distance from midpoint of center of mass of cells i and j -> center
+                  // d = 0.5 * (s_i + s_j) - s_i = 0.5 * (s_j - s_i)
+
+                  d[0] = 0.5 * ( SphP[q_other].Center[0] - SphP[q].Center[0] );
+                  d[1] = 0.5 * ( SphP[q_other].Center[1] - SphP[q].Center[1] );
+                  d[2] = 0.5 * ( SphP[q_other].Center[2] - SphP[q].Center[2] );
+
+                  //d[0] = VF[i].cx - SphP[q].Center[0];
+                  //d[1] = VF[i].cy - SphP[q].Center[1];
+                  //d[2] = VF[i].cz - SphP[q].Center[2];
 #if !defined(REFLECTIVE_X)
                   double xtmp;
                   d[0] = NEAREST_X(d[0]);
@@ -718,8 +804,17 @@ void limit_gradients(void)
                               value /= All.cf_atime;
                             }
                           else
-                            value = *(MyFloat *)(((char *)(&SphP[q])) + grad_elements[k].offset);
-
+                          {
+                            if((grad_elements[k].type == GRADIENT_TYPE_DUST_VELX) || 
+                               (grad_elements[k].type == GRADIENT_TYPE_DUST_VELY) ||
+                               (grad_elements[k].type == GRADIENT_TYPE_DUST_VELZ))
+                            {
+                              value = *(MyFloat *)(((char *)(&SphP[q])) + grad_elements[k].offset);
+                              value /= All.cf_atime;
+                            } 
+                            else
+                              value = *(MyFloat *)(((char *)(&SphP[q])) + grad_elements[k].offset);
+                          }
                           data = (MySingle *)(((char *)(&(SphP[q].Grad))) + grad_elements[k].offset_grad);
 
                           if(grad_elements[k].type != GRADIENT_TYPE_RTF)

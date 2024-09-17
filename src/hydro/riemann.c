@@ -85,11 +85,48 @@
  *  \param[in] st_R Right hand side state.
  *  \param[out] st_face State at face.
  *
- *  \return 0.
+ *  \return Central pressure.
  */
 double godunov_flux_3d(struct state *st_L, struct state *st_R, struct state_face *st_face)
 {
   double Vel;
+#ifdef DUST_INCLUDE
+  // Check if a vacuum state is produced in star region
+  if( st_L->velx_dust < 0 && st_R->velx_dust > 0)
+  {
+    st_face->rhodust = 0;
+    st_face->velx_dust = 0;
+    st_face->vely_dust = 0;
+    st_face->velz_dust = 0;
+  } //endif vacuum state
+  else
+  {
+    double Roe_av = sqrt(st_L->rhodust / st_R->rhodust);
+    double Sd = (Roe_av * st_L->velx_dust + st_R->velx_dust) 
+                / ( 1+Roe_av);
+    if( Sd > 0)
+    {
+      st_face->rhodust = st_L->rhodust;
+      st_face->velx_dust = st_L->velx_dust;
+      st_face->vely_dust = st_L->vely_dust;
+      st_face->velz_dust = st_L->velz_dust;
+    }
+    if( Sd < 0)
+    {
+      st_face->rhodust = st_R->rhodust;
+      st_face->velx_dust = st_R->velx_dust;
+      st_face->vely_dust = st_R->vely_dust;
+      st_face->velz_dust = st_R->velz_dust;
+    }
+    if( Sd == 0)
+    {
+      st_face->rhodust = 0.5 * (st_R->rhodust + st_L->rhodust);
+      st_face->velx_dust = 0.5 * (st_R->velx_dust + st_L->velx_dust);
+      st_face->vely_dust = 0.5 * (st_R->vely_dust + st_L->vely_dust);
+      st_face->velz_dust = 0.5 * (st_R->velz_dust + st_L->velz_dust);
+    }
+  }
+#endif //#ifdef DUST_INCLUDE
 
 #ifndef ISOTHERM_EQS
   {
@@ -157,6 +194,13 @@ double godunov_flux_3d(struct state *st_L, struct state *st_R, struct state_face
           }
         else
           {
+            int p = st_R->ID;
+            double Posx = st_R->dx;
+            double Posy = st_R->dy;
+            double Posz = st_R->dz;
+
+            printf("Posx = %f, posy=%f, posz=%f", Posx, Posy, Posz);
+            fflush(stdout);
             terminate("one of the densities is negative\n");
           }
         return 0;

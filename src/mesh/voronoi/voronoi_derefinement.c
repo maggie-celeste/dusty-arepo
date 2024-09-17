@@ -111,6 +111,11 @@ static struct flux_list_data
 {
   int task, index;
   double dM, dP[3];
+
+#ifdef DUST_INCLUDE
+  double dMD, dPD[3];
+#endif /*ifdef DUST_INCLUDE */
+
 #ifdef MHD
   double dB[3];
 #endif /* #ifdef MHD */
@@ -615,6 +620,13 @@ int do_derefinements(void)
                           SphP[p].Momentum[1] += fac * SphP[i].Momentum[1];
                           SphP[p].Momentum[2] += fac * SphP[i].Momentum[2];
 
+                          #ifdef DUST_INCLUDE
+                          P[p].DustMass += fac * P[i].DustMass;
+                          SphP[p].DustMomentum[0] += fac * SphP[i].DustMomentum[0];
+                          SphP[p].DustMomentum[1] += fac * SphP[i].DustMomentum[1];
+                          SphP[p].DustMomentum[2] += fac * SphP[i].DustMomentum[2];
+                          #endif // #ifdef DUST_INCLUDE
+
 #ifdef MHD
                           SphP[p].BConserved[0] += fac * SphP[i].BConserved[0];
                           SphP[p].BConserved[1] += fac * SphP[i].BConserved[1];
@@ -670,6 +682,12 @@ int do_derefinements(void)
                           FluxList[Nflux].dB[1] = fac * SphP[i].BConserved[1];
                           FluxList[Nflux].dB[2] = fac * SphP[i].BConserved[2];
 #endif /* #ifdef MHD */
+#ifdef DUST_INCLUDE
+                          FluxList[Nflux].dMD    = fac * P[i].DustMass;
+                          FluxList[Nflux].dPD[0] = fac * SphP[i].DustMomentum[0];
+                          FluxList[Nflux].dPD[1] = fac * SphP[i].DustMomentum[1];
+                          FluxList[Nflux].dPD[2] = fac * SphP[i].DustMomentum[2];
+#endif
 
 #ifndef ISOTHERM_EQS
                           FluxList[Nflux].dEnergy = fac * SphP[i].Energy;
@@ -705,6 +723,12 @@ int do_derefinements(void)
               P[i].Vel[0] = 0;
               P[i].Vel[1] = 0;
               P[i].Vel[2] = 0;
+#ifdef DUST_INCLUDE
+              P[i].DustMass   = 0;
+              SphP[i].DustVel[0] = 0;
+              SphP[i].DustVel[1] = 0;
+              SphP[i].DustVel[2] = 0;
+#endif
 
               SphP[i].VelVertex[0] = 0;
               SphP[i].VelVertex[1] = 0;
@@ -907,6 +931,13 @@ static void derefine_apply_flux_list(void)
       SphP[p].BConserved[1] += FluxListGet[i].dB[1];
       SphP[p].BConserved[2] += FluxListGet[i].dB[2];
 #endif /* #ifdef MHD */
+
+#ifdef DUST_INCLUDE
+      P[p].DustMass += FluxListGet[i].dMD;
+      SphP[p].DustMomentum[0] += FluxListGet[i].dPD[0];
+      SphP[p].DustMomentum[1] += FluxListGet[i].dPD[1];
+      SphP[p].DustMomentum[2] += FluxListGet[i].dPD[2];
+#endif
 
 #ifdef MAXSCALARS
       int k;

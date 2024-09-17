@@ -43,7 +43,8 @@
 
 int N_Grad = 0;
 
-struct grad_elements grad_elements[MAXGRADIENTS], *GDensity, *GVelx, *GVely, *GVelz, *GPressure, *GUtherm;
+struct grad_elements grad_elements[MAXGRADIENTS], *GDensity, *GVelx, *GVely, *GVelz, *GPressure, *GUtherm,
+                                                  *GDustDensity, *GDustVelx, *GDustVely, *GDustVelz;
 
 /*! \brief Initializes all gradient fields.
  *
@@ -59,6 +60,12 @@ void init_gradients()
 #endif /* #if defined(MAXSCALARS) */
 
   gradient_init(&SphP[0].Density, &PrimExch[0].Density, SphP[0].Grad.drho, GRADIENT_TYPE_DENSITY);
+#ifdef DUST_INCLUDE
+  gradient_init(&SphP[0].DustDensity, &PrimExch[0].DustDensity, SphP[0].Grad.drhodust, GRADIENT_TYPE_DUST_DENSITY);
+  gradient_init(&SphP[0].DustVel[0], &PrimExch[0].VelDust[0], SphP[0].Grad.dvel_dust[0], GRADIENT_TYPE_DUST_VELX);
+  gradient_init(&SphP[0].DustVel[1], &PrimExch[0].VelDust[1], SphP[0].Grad.dvel_dust[1], GRADIENT_TYPE_DUST_VELY);
+  gradient_init(&SphP[0].DustVel[2], &PrimExch[0].VelDust[2], SphP[0].Grad.dvel_dust[2], GRADIENT_TYPE_DUST_VELZ);
+#endif
 
   gradient_init(&P[0].Vel[0], &PrimExch[0].VelGas[0], SphP[0].Grad.dvel[0], GRADIENT_TYPE_VELX);
   gradient_init(&P[0].Vel[1], &PrimExch[0].VelGas[1], SphP[0].Grad.dvel[1], GRADIENT_TYPE_VELY);
@@ -107,7 +114,8 @@ void gradient_init(MyFloat *addr, MyFloat *addr_exch, MySingle *addr_grad, int t
 
   grad_elements[N_Grad].type = type;
 
-  if((type == GRADIENT_TYPE_VELX) || (type == GRADIENT_TYPE_VELY) || (type == GRADIENT_TYPE_VELZ))
+  if((type == GRADIENT_TYPE_VELX) || (type == GRADIENT_TYPE_VELY) || (type == GRADIENT_TYPE_VELZ) ||
+     (type == GRADIENT_TYPE_DUST_VELX) || (type == GRADIENT_TYPE_DUST_VELY) || (type == GRADIENT_TYPE_DUST_VELZ))
     {
       /* basic structure is P */
       grad_elements[N_Grad].offset = ((char *)addr) - ((char *)&P[0]);
@@ -141,6 +149,17 @@ void gradient_init(MyFloat *addr, MyFloat *addr_exch, MySingle *addr_grad, int t
       case GRADIENT_TYPE_UTHERM:
         GUtherm = &grad_elements[N_Grad];
         break;
+      case GRADIENT_TYPE_DUST_VELX:
+        GDustVelx = &grad_elements[N_Grad];
+        break;
+      case GRADIENT_TYPE_DUST_VELY:
+        GDustVely = &grad_elements[N_Grad];
+        break;
+      case GRADIENT_TYPE_DUST_VELZ:
+        GDustVelz = &grad_elements[N_Grad];
+        break;
+      case GRADIENT_TYPE_DUST_DENSITY:
+        GDustDensity = &grad_elements[N_Grad];
       default:
         break;
     }

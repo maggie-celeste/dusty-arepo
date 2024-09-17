@@ -47,5 +47,5 @@ void cool_cell_Beta(int i);
 #endif
 
 #ifdef MOD_LOMBARDI_COOLING
-void MOD_LOMBARDI_COOLING(void);
+void lombardi_vooling(void);
 #endif

@@ -264,6 +264,40 @@ static void io_func_vel(int particle, int components, void *buffer, int mode)
     }
 }
 
+#ifdef DUST_INCLUDE
+/*! \brief IO function for velocities.
+ *
+ *  Note the different factors of scalefactor in the output than in the code!
+ *
+ *  \param[in] particle Index of particle/cell.
+ *  \param[in] components Number of entries in array.
+ *  \param[out] out_buffer File output buffer.
+ *  \param[in] mode Mode 0: output, 1: input.
+ *
+ *  \return void
+ */
+static void io_func_dustvel(int particle, int components, void *buffer, int mode)
+{
+  int k;
+
+  if(mode == 0)
+    {
+      for(k = 0; k < components; k++)
+        {
+          ((MyOutputFloat *)buffer)[k] = SphP[particle].DustVel[k];
+          ((MyOutputFloat *)buffer)[k] *= sqrt(All.cf_a3inv); /* we are dealing with p = a^2 * xdot */
+        }
+    }
+  else
+    {
+      for(k = 0; k < components; k++)
+        {
+          SphP[particle].DustVel[k] = ((MyInputFloat *)buffer)[k];
+        }
+    }
+}
+#endif
+
 #ifdef OUTPUTACCELERATION
 /*! \brief IO function for gravitational accelerations.
  *
@@ -529,6 +563,7 @@ void init_io_fields()
   init_units(IO_MASS, 0., -1., 0., 1., 0., All.UnitMass_in_g);
   init_snapshot_type(IO_MASS, SN_MINI);
 
+
 #ifdef OUTPUTPOTENTIAL
   init_field(IO_POT, "POT ", "Potential", MEM_MY_SINGLE, FILE_MY_IO_FLOAT, FILE_MY_IO_FLOAT, 1, A_P, &P[0].Potential, 0,
              ALL_TYPES); /* gravitational potential */
@@ -552,17 +587,28 @@ void init_io_fields()
   init_units(IO_RHO, -3., 2., -3., 1., 0., All.UnitDensity_in_cgs);
   init_snapshot_type(IO_RHO, SN_MINI);
 
+#ifdef DUST_INCLUDE
+  init_field(IO_DUSTMASS, "DSTM", "DustMasses", MEM_MY_DOUBLE, FILE_MY_IO_FLOAT, FILE_MY_IO_FLOAT, 1, A_P, &P[0].DustMass, 0,
+             ALL_TYPES); /* particle dust mass */
+  init_units(IO_DUSTMASS, 0., -1., 0., 1., 0., All.UnitMass_in_g);
+  init_snapshot_type(IO_DUSTMASS, SN_MINI);
+
+  init_field(IO_DUSTRHO, "DRHO", "DustDensity", MEM_MY_FLOAT, FILE_MY_IO_FLOAT, FILE_MY_IO_FLOAT, 1, A_SPHP, &SphP[0].DustDensity,0,
+             ALL_TYPES); /* particle density */
+  init_units(IO_DUSTRHO, -3., 2., -3., 1., 0., All.UnitDensity_in_cgs);
+  init_snapshot_type(IO_DUSTRHO, SN_MINI);
+
+  init_field(IO_DUSTVEL, "DVEL", "DustVelocities", MEM_MY_DOUBLE, FILE_MY_IO_FLOAT, FILE_MY_IO_FLOAT, 3, A_NONE, 0, io_func_dustvel,
+             GAS_ONLY);                                                 /* particle velocities */
+  init_units(IO_DUSTVEL, 0.5, 0., 0., 0., 1., All.UnitVelocity_in_cm_per_s); /* sqrt(a)*km/s */
+  init_snapshot_type(IO_DUSTVEL, SN_MINI);
+#endif
+
 #ifdef OUTPUT_PRESSURE
   init_field(IO_PRESSURE, "PRES", "Pressure", MEM_MY_FLOAT, FILE_MY_IO_FLOAT, FILE_NONE, 1, A_SPHP, &SphP[0].Pressure, 0, GAS_ONLY);
   init_units(IO_PRESSURE, -3.0, 2.0, -3.0, 1.0, 2.0,
              All.UnitDensity_in_cgs * All.UnitVelocity_in_cm_per_s * All.UnitVelocity_in_cm_per_s);
 #endif /* #ifdef OUTPUT_PRESSURE */
-
-#ifdef OUTPUT_CSND
-  init_field(IO_CSND, "CSND", "SoundSpeed", MEM_MY_FLOAT, FILE_MY_IO_FLOAT, FILE_NONE, 1, A_SPHP, &SphP[0].Csnd, 0, GAS_ONLY);
-  init_units(IO_CSND, 0., 0., 0., 0., 1., All.UnitVelocity_in_cm_per_s);
-#endif /* #ifdef OUTPUT_CSND */
-
 
 #ifdef MOD_LOMBARDI_COOLING
 #ifdef OUTPUT_SCALEHEIGHT
@@ -572,6 +618,10 @@ void init_io_fields()
 #endif /* #ifdef MOD_LOMBARDI_COOLING */
 
 
+#ifdef OUTPUT_CSND
+  init_field(IO_CSND, "CSND", "SoundSpeed", MEM_MY_FLOAT, FILE_MY_IO_FLOAT, FILE_NONE, 1, A_SPHP, &SphP[0].Csnd, 0, GAS_ONLY);
+  init_units(IO_CSND, 0., 0., 0., 0., 1., All.UnitVelocity_in_cm_per_s);
+#endif /* #ifdef OUTPUT_CSND */
 
 #if defined(COOLING)
   init_field(IO_NE, "NE  ", "ElectronAbundance", MEM_NONE, FILE_MY_IO_FLOAT, FILE_MY_IO_FLOAT, 1, A_NONE, 0, io_func_ne,

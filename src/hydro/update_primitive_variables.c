@@ -89,6 +89,9 @@ void update_primitive_variables(void)
       set_pressure_of_cell_internal(P, SphP, i); /* calculate the pressure from Density and Utherm (and composition) */
 
       SphP[i].OldMass = P[i].Mass;
+#ifdef DUST_INCLUDE
+      SphP[i].OldDustMass = P[i].DustMass;
+#endif
 
       SphP[i].TimeLastPrimUpdate = All.Time;
     }
@@ -183,6 +186,39 @@ void update_primitive_variables_single(struct particle_data *localP, struct sph_
                                        struct pv_update_data *pvd)
 {
   localSphP[i].Density = localP[i].Mass / localSphP[i].Volume;
+
+  // CHECK DENSITY HASN'T FALLEN BELOW MINIMUM VALUE (TO PREVENT NEGATIVE DENSITIES)
+  if ( localSphP[i].Density < 1e-25 ){
+    localSphP[i].Density = 1e-25;
+    localP[i].Mass = localSphP[i].Volume * 1e-25;
+  }
+
+#ifdef DUST_INCLUDE
+  localSphP[i].DustDensity = localP[i].DustMass / localSphP[i].Volume;
+
+  if ( localSphP[i].DustDensity < 1e-8 *  localSphP[i].Density){
+    localSphP[i].DustDensity = 1e-8 *  localSphP[i].Density;
+    localP[i].DustMass = localSphP[i].Volume * localSphP[i].DustDensity;
+
+    // if dust density has been amended, updating the dust velocity to match gas velocity is nbd...
+    localSphP[i].DustMomentum[0] = localSphP[i].Momentum[0] / localP[i].Mass * localP[i].DustMass;
+    localSphP[i].DustMomentum[1] = localSphP[i].Momentum[1] / localP[i].Mass * localP[i].DustMass;
+    localSphP[i].DustMomentum[2] = localSphP[i].Momentum[2] / localP[i].Mass * localP[i].DustMass;
+  }
+  
+  if(localP[i].DustMass >0)
+  {
+    localSphP[i].DustVel[0] = localSphP[i].DustMomentum[0] / localP[i].DustMass;
+    localSphP[i].DustVel[1] = localSphP[i].DustMomentum[1] / localP[i].DustMass;
+    localSphP[i].DustVel[2] = localSphP[i].DustMomentum[2] / localP[i].DustMass;
+  }
+  else /* P[i].DustMass <= 0 */
+    {
+      localSphP[i].DustVel[0] = 0;
+      localSphP[i].DustVel[1] = 0;
+      localSphP[i].DustVel[2] = 0;
+    }
+#endif
 
   if(localP[i].Mass > 0)
     {
@@ -297,8 +333,7 @@ void update_internal_energy(struct particle_data *localP, struct sph_particle_da
 
   if(localSphP[i].Utherm < 0)
     {
-      printf("negative utherm %g\n", localSphP[i].Utherm);
-      terminate("stop");
+      terminate("negative utherm %g\n", localSphP[i].Utherm);
     }
 
 #endif /* #ifndef ISOTHERM_EQS */

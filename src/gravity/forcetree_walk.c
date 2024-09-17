@@ -182,7 +182,11 @@ int force_treeevaluate(gravdata_in *in, gravdata_out *out, int target, int mode,
               dz = GRAVITY_NEAREST_Z(Tree_Pos_list[3 * no + 2] - pos_z);
               r2 = dx * dx + dy * dy + dz * dz;
 
+#ifdef DUST_INCLUDE
+              mass = P[no].Mass + P[no].DustMass;
+#else
               mass = P[no].Mass;
+#endif //ifdef DUST_INCLUDE
 
               if(measure_cost_flag)
                 Thread[thread_id].P_CostCount[no]++;

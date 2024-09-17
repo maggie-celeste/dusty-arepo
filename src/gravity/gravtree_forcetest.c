@@ -523,7 +523,11 @@ static void gravity_forcetest_evaluate(int target, int mode, int threadid)
 
       r2 = dx * dx + dy * dy + dz * dz;
 
+#ifdef DUST_INCLUDE
+      mass = P[j].Mass + P[j].DustMass;
+#else 
       mass = P[j].Mass;
+#endif //ifdef DUST_INCLUDE
 
       /* now evaluate the multipole moment */
 

@@ -573,8 +573,12 @@ void pmforce_nonperiodic_zoom_optimized_prepare_density(int grnr)
       double dx = to_slab_fac * (pos[0] - All.Corner[grnr][0]) - slab_x;
       double dy = to_slab_fac * (pos[1] - All.Corner[grnr][1]) - slab_y;
       double dz = to_slab_fac * (pos[2] - All.Corner[grnr][2]) - slab_z;
-
+    
+#ifdef DUST_INCLUDE
+      double weight = P[pindex].Mass + P[pindex].DustMass;
+#else
       double weight = P[pindex].Mass;
+#endif // #ifdef DUST_INCLUDE
 
       localfield_data[part[i + 0].localindex] += weight * (1.0 - dx) * (1.0 - dy) * (1.0 - dz);
       localfield_data[part[i + 1].localindex] += weight * (1.0 - dx) * (1.0 - dy) * dz;
@@ -973,14 +977,23 @@ void pmforce_nonperiodic_uniform_optimized_prepare_density(int grnr)
         int task1   = myplan.slab_to_task[slab_xx];
 
         size_t ind0        = send_offset[task0] + send_count[task0]++;
+
+#ifdef DUST_INCLUDE
+        partout[ind0].Mass = P[i].Mass + P[i].DustMass;
+#else
         partout[ind0].Mass = P[i].Mass;
+#endif // #ifdef DUST_INCLUDE
         for(j = 0; j < 3; j++)
           partout[ind0].Pos[j] = pos[j];
 
         if(task0 != task1)
           {
             size_t ind1        = send_offset[task1] + send_count[task1]++;
+#ifdef DUST_INCLUDE
+            partout[ind1].Mass = P[i].Mass + P[i].DustMass;
+#else
             partout[ind1].Mass = P[i].Mass;
+#endif // #ifdef DUST_INCLUDE
             for(j = 0; j < 3; j++)
               partout[ind1].Pos[j] = pos[j];
           }
@@ -1016,28 +1029,44 @@ void pmforce_nonperiodic_uniform_optimized_prepare_density(int grnr)
           task3 = (column3 - myplan.pivotcol) / (myplan.avg - 1) + myplan.tasklastsection;
 
         size_t ind0        = send_offset[task0] + send_count[task0]++;
+#ifdef DUST_INCLUDE
+        partout[ind0].Mass = P[i].Mass + P[i].DustMass;
+#else
         partout[ind0].Mass = P[i].Mass;
+#endif // #ifdef DUST_INCLUDE
         for(j = 0; j < 3; j++)
           partout[ind0].Pos[j] = pos[j];
 
         if(task1 != task0)
           {
             size_t ind1        = send_offset[task1] + send_count[task1]++;
+#ifdef DUST_INCLUDE
+            partout[ind1].Mass = P[i].Mass + P[i].DustMass;
+#else
             partout[ind1].Mass = P[i].Mass;
+#endif // #ifdef DUST_INCLUDE
             for(j = 0; j < 3; j++)
               partout[ind1].Pos[j] = pos[j];
           }
         if(task2 != task1 && task2 != task0)
           {
             size_t ind2        = send_offset[task2] + send_count[task2]++;
+#ifdef DUST_INCLUDE
+            partout[ind2].Mass = P[i].Mass + P[i].DustMass;
+#else
             partout[ind2].Mass = P[i].Mass;
+#endif // #ifdef DUST_INCLUDE
             for(j = 0; j < 3; j++)
               partout[ind2].Pos[j] = pos[j];
           }
         if(task3 != task0 && task3 != task1 && task3 != task2)
           {
             size_t ind3        = send_offset[task3] + send_count[task3]++;
+#ifdef DUST_INCLUDE
+            partout[ind3].Mass = P[i].Mass + P[i].DustMass;
+#else
             partout[ind3].Mass = P[i].Mass;
+#endif // #ifdef DUST_INCLUDE
             for(j = 0; j < 3; j++)
               partout[ind3].Pos[j] = pos[j];
           }

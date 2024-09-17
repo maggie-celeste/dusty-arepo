@@ -352,13 +352,19 @@ extern hwloc_cpuset_t cpuset_thread[NUM_THREADS];
 #define COUNT_GRAD_MHD 0
 #endif /* #ifdef MHD #else */
 
+#ifdef DUST_INCLUDE
+#define COUNT_GRAD_DUST 4 
+#else /* #ifdef DUST_INCLUDE */
+#define COUNT_GRAD_DUST 0
+#endif /* ifdef DUST_INCLUDE #else */
+
 #ifdef MAXSCALARS
 #define COUNT_GRAD_SCALARS MAXSCALARS
 #else /* #ifdef MAXSCALARS */
 #define COUNT_GRAD_SCALARS 0
 #endif /* #ifdef MAXSCALARS #else*/
 
-#define MAXGRADIENTS (COUNT_GRAD_DEFAULT + COUNT_GRAD_MHD + COUNT_GRAD_SCALARS)
+#define MAXGRADIENTS (COUNT_GRAD_DEFAULT + COUNT_GRAD_MHD + COUNT_GRAD_SCALARS + COUNT_GRAD_DUST)
 
 /*************************************/
 
@@ -1229,6 +1235,10 @@ extern struct particle_data
   MyFloat Vel[3];        /*!< particle velocity at its current time */
   MySingle GravAccel[3]; /*!< particle acceleration due to gravity */
 
+#ifdef DUST_INCLUDE
+  MyDouble DustMass;     /*!< particle dust mass */
+#endif
+
 #ifdef EXTERNALGRAVITY
   MySingle dGravAccel; /*!< norm of spatial derivatives tensor of gravity accelerations due to external force */
 #endif
@@ -1332,12 +1342,23 @@ extern struct sph_particle_data
   MyFloat Momentum[3];
   MyFloat Volume;
   MyFloat OldMass;
+#ifdef DUST_INCLUDE
+  MyFloat OldDustMass;
+  MyFloat DustMomentum[3];
+  MyFloat DustVel[3];
+  MyFloat OldMomentum[3]; //note: this is the gas momentum, but is only used with dust, to calculate drag terms => not saved otherwise.
+  MyFloat OldDustMomentum[3];
+#endif //#ifdef DUST_INCLUDE
 
 #ifdef MOD_LOMBARDI_COOLING
   MyFloat OldUtherm;    //Used to calculate delta_utherm accounting for hydro/drag etc
 #endif // #ifdef LOMBARDI_COOLING
   /* primitive variables */
   MyFloat Density;
+#ifdef DUST_INCLUDE
+  MyFloat DustDensity;
+#endif // #ifdef DUST_INCLUDE
+
   MyFloat Pressure; /*!< current pressure */
   MySingle Utherm;
 
@@ -1398,6 +1419,12 @@ extern struct sph_particle_data
 #endif /* #if defined(REFINEMENT_SPLIT_CELLS) */
 
 #if defined(COOLING)
+  MyFloat Ne; /* electron fraction, expressed as local electron number
+                 density normalized to the hydrogen number density. Gives
+                 indirectly ionization state and mean molecular weight. */
+#endif        /* #if defined(COOLING) */
+
+#if defined(BETA_COOLING)
   MyFloat Ne; /* electron fraction, expressed as local electron number
                  density normalized to the hydrogen number density. Gives
                  indirectly ionization state and mean molecular weight. */
@@ -1677,8 +1704,11 @@ enum iofields
   IO_VEL,
   IO_ID,
   IO_MASS,
+  IO_DUSTMASS,
+  IO_DUSTVEL,
   IO_U,
   IO_RHO,
+  IO_DUSTRHO,
   IO_VORT,
   IO_VOL,
   IO_CM,

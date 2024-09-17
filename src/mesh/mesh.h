@@ -39,6 +39,8 @@
 #define REFL_Y_FLAGS 132379128
 #define REFL_Z_FLAGS 134217216
 
+//MG: ADDED THIS EXTRA TAG FOR THE SHOCK TEST.
+#define OUTFLOW_REFLECT_X (1 << 26)
 #define OUTFLOW_X (1 << 27)
 #define OUTFLOW_Y (1 << 28)
 #define OUTFLOW_Z (1 << 29)
@@ -74,6 +76,11 @@ extern int N_Scalar; /*!< number of registered scalars */
 #define GRADIENT_TYPE_FLD 10
 #define GRADIENT_TYPE_RTF 11
 
+#define GRADIENT_TYPE_DUST_DENSITY 12
+#define GRADIENT_TYPE_DUST_VELX 13
+#define GRADIENT_TYPE_DUST_VELY 14
+#define GRADIENT_TYPE_DUST_VELZ 15
+
 extern struct grad_elements
 {
   int type;           /*!< gradient type, ensures special treatment for velocities and speed of sound */
@@ -82,16 +89,22 @@ extern struct grad_elements
   size_t offset_grad; /*!< offset in the grad_data struct */
   double *min_value, *max_value;
   double value0, value1;
-} grad_elements[MAXGRADIENTS], *GDensity, *GVelx, *GVely, *GVelz, *GPressure, *GUtherm;
+} grad_elements[MAXGRADIENTS], *GDensity, *GVelx, *GVely, *GVelz, *GPressure, *GUtherm, 
+                               *GDustDensity, *GDustVelx, *GDustVely, *GDustVelz;
 
 extern int N_Grad; /*!< number of gradients to be calculated */
 
 extern struct grad_data
 {
   MySingle drho[3];
-
+  
   MySingle dvel[3][3];
   MySingle dpress[3];
+
+#ifdef DUST_INCLUDE
+  MySingle drhodust[3];
+  MySingle dvel_dust[3][3];
+#endif
 
 #ifdef MHD
   MySingle dB[3][3];
@@ -110,6 +123,12 @@ extern struct primexch
   MyFloat VelGas[3];
   MyFloat VelVertex[3];
 
+#ifdef DUST_INCLUDE
+  MyFloat DustDensity;
+  MyFloat OldDustMass;
+
+  MyFloat VelDust[3];
+#endif
 #ifdef MHD
   MyFloat B[3];
 
@@ -188,6 +207,15 @@ struct state
   MyFloat velVertex[3];
   struct grad_data *grad;
 
+#ifdef DUST_INCLUDE
+  double rhodust;
+  double olddustmass;
+  
+  MyFloat velDust[3];
+
+  double velx_dust, vely_dust, velz_dust;
+#endif
+
   double csnd;
   double Energy;
 #ifdef MHD
@@ -220,6 +248,10 @@ extern struct state_face
   double rho;
   double velx, vely, velz;
   double press;
+#ifdef DUST_INCLUDE
+  double rhodust;
+  double velx_dust, vely_dust, velz_dust;
+#endif
 #ifdef MHD
   double Bx, By, Bz;
 #endif /* #ifdef MHD */
@@ -235,6 +267,11 @@ extern struct fluxes
   double mass;
   double momentum[3];
   double energy;
+
+#ifdef DUST_INCLUDE
+  double dustmass;
+  double dustmomentum[3]
+#endif
 
 #ifdef MHD
   double B[3];

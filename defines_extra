@@ -92,6 +92,10 @@ FORCETEST  #=0.001               # calculates for given fraction of particles di
 FORCETEST_TESTFORCELAW  #=1      # this enables a special test to measure the effective force law of the code, can be set to 1 or 2
 GODUNOV_STATS
 
+# DUSTY AREPO
+GALACTIC_POTENTIAL
+SPIRAL_PERTURBATION
+
 # parameters in compile-time options which do not correspond to any ifdef in the code
 NFW_C
 NFW_Eps

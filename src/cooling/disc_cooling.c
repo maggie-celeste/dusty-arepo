@@ -63,6 +63,7 @@
 
 #ifdef MOD_LOMBARDI_COOLING
   static double (*opacities) = NULL; 
+  static double (*pseudo_opacities) = NULL; 
   
 #ifdef LOMBARDI_TEQ
   static double T_EQ = LOMBARDI_TEQ;
@@ -90,11 +91,6 @@
 double DoCooling_Beta(double u_old, double rho, double dt, double *ne_guess, double omega, double Radius)
 {
   double u ;
-
-  DoCool.u_old_input    = u_old;
-  DoCool.rho_input      = rho;
-  DoCool.dt_input       = dt;
-  DoCool.ne_guess_input = *ne_guess;
 
   if(!gsl_finite(u_old))
     terminate("invalid input: u_old=%g\n", u_old);
@@ -222,11 +218,16 @@ void cool_cell_Beta(int i)
 
 
 #ifdef MOD_LOMBARDI_COOLING
+
+inline int table_index(int row, int col, int ncols){
+  return row * ncols + col;
+} 
+
 /*! \brief Apply the Lombardi cooling to all the active gas cells, as described in Lombardi et al 2015.
  *
  *  \return void
  */
-void MOD_LOMBARDI_COOLING(void) /* lombardi cooling routine for protoplanetary discs */
+void lombardi_cooling(void) /* lombardi cooling routine for protoplanetary discs */
 {
   double Teq = T_EQ;
   if (opacities == NULL){
@@ -287,11 +288,13 @@ void MOD_LOMBARDI_COOLING(void) /* lombardi cooling routine for protoplanetary d
             continue; // skip cells that have been swallowed or eliminated 
 
           // Start by computing the pseudo-mean column density, rho_column
-          double star_mass = PartSpecialListGlobal[0].mass;
+          star_mass = PartSpecialListGlobal[0].mass;
+          star_x = PartSpecialListGlobal[0].pos[0];
+          star_y = PartSpecialListGlobal[0].pos[1];
           
           double Posx, Posy, Radius, Omega;
-          Posx = P[i].Pos[0] - PartSpecialListGlobal[star_idx].pos[0];
-          Posy = P[i].Pos[1] - PartSpecialListGlobal[star_idx].pos[1];
+          Posx = P[i].Pos[0] - star_x;
+          Posy = P[i].Pos[1] - star_y;
           Radius = sqrt( pow(Posx,2) + pow(Posy,2));
           Omega = sqrt( All.G * star_mass / pow(Radius, 3)); 
 
@@ -424,67 +427,5 @@ void MOD_LOMBARDI_COOLING(void) /* lombardi cooling routine for protoplanetary d
     }
 }
 #endif
-
-/*! \brief Apply the isochoric cooling to a given gas cell.
- *
- *  This function applies the normal isochoric cooling to a single gas cell.
- *  Once the cooling has been applied according to one of the cooling models
- *  implemented, the internal energy per unit mass, the total energy and the
- *  pressure of the cell are updated.
- *
- *  \param[in] i Index of the gas cell to which cooling is applied.
- *
- *  \return void
- */
-void cool_cell(int i)
-{
-  double dt, dtime, ne = 1;
-  double unew, dens, dtcool, dx, dy, dz;
-
-  dens = SphP[i].Density;
-  #ifdef DUST_INCLUDE
-    dens += SphP[i].DustDensity;
-  #endif
-  
-  dx = P[i].Pos[0] - star_x;
-  dy = P[i].Pos[1] - star_y;
-  dz = P[i].Pos[2] - star_z;
-  
-  double radius = sqrt( dx*dx + dy*dy + dz*dz );
-  
-  double omega = sqrt( All.G * star_mass / pow(radius, 3));
-
-  dt = (P[i].TimeBinHydro ? (((integertime)1) << P[i].TimeBinHydro) : 0) * All.Timebase_interval;
-
-  dtime = All.cf_atime * dt / All.cf_time_hubble_a;
-
-  dtcool = dtime;
-
-  ne         = SphP[i].Ne; /* electron abundance (gives ionization state and mean molecular weight) */
-  unew       = DoCooling_Beta(dmax(All.MinEgySpec, SphP[i].Utherm), dens * All.cf_a3inv, dtcool, &ne, omega, radius);
-  SphP[i].Ne = ne;
-
-  if(unew < 0)
-    terminate("invalid temperature: Thistask=%d i=%d unew=%g\n", ThisTask, i, unew);
-
-  double du = unew - SphP[i].Utherm;
-
-  if(unew < All.MinEgySpec)
-    du = All.MinEgySpec - SphP[i].Utherm;
-
-  SphP[i].Utherm += du;
-  SphP[i].Energy += All.cf_atime * All.cf_atime * du * P[i].Mass;
-
-  #ifdef DUST_INCLUDE
-  SphP[i].Energy += All.cf_atime * All.cf_atime * du * P[i].DustMass;
-  #endif
-
-#ifdef OUTPUT_COOLHEAT
-  if(dtime > 0)
-    SphP[i].CoolHeat = du * P[i].Mass / dtime;
-#endif /* #ifdef OUTPUT_COOLHEAT */
-
-  set_pressure_of_cell(i);
-}
 
 #endif /* #ifdef DISC_COOLING */

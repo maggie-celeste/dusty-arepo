@@ -197,7 +197,11 @@ void init_individual_softenings(void)
     if(P[i].Type == 1)
       {
         ndm++;
+#ifdef DUST_INCLUDE
+        mass += P[i].Mass + P[i].DustMass;
+#else
         mass += P[i].Mass;
+#endif //ifdef DUST_INCLUDE
       }
   sumup_large_ints(1, &ndm, &ndmtot);
   MPI_Allreduce(&mass, &masstot, 1, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
@@ -209,7 +213,11 @@ void init_individual_softenings(void)
   for(i = 0; i < NumPart; i++)
     {
       if(((1 << P[i].Type) & (INDIVIDUAL_GRAVITY_SOFTENING)))
+#ifdef DUST_INCLUDE
+        P[i].SofteningType = get_softening_type_from_mass(P[i].Mass + P[i].DustMass);
+#else
         P[i].SofteningType = get_softening_type_from_mass(P[i].Mass);
+#endif //ifdef DUST_INCLUDE
     }
 }
 #endif /* #ifdef INDIVIDUAL_GRAVITY_SOFTENING */

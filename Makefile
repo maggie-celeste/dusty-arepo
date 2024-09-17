@@ -32,6 +32,7 @@ $(info )
 
 PYTHON = python
 PERL   = /usr/bin/perl
+#PERL   = /usr/bin/perl5.26.3
 RESULT     := $(shell CONFIG=$(CONFIG) PERL=$(PERL) BUILD_DIR=$(BUILD_DIR) make -f config-makefile)
 CONFIGVARS := $(shell cat $(BUILD_DIR)/arepoconfig.h)
 RESULT     := $(shell SRC_DIR=$(SRC_DIR) BUILD_DIR=$(BUILD_DIR) ./git_version.sh)
@@ -60,8 +61,8 @@ HWLOC_LIB = -L/opt/local/lib -lhwloc
 # libraries that are included on demand, depending on Config.sh options
 FFTW_INCL = -I/opt/local/include -I/usr/local/include
 FFTW_LIBS = -L/opt/local/lib -I/usr/local/lib
-HDF5_INCL = -I/opt/local/include -DH5_USE_16_API
-HDF5_LIB  = -L/opt/local/lib  -lhdf5 -lz
+HDF5_INCL = -I/opt/ioa/software/hdf5_gcc/1.10.5_parallel/include -DH5_USE_16_API
+HDF5_LIB  = -L/opt/ioa/software/hdf5_gcc/1.10.5_parallel/lib  -lhdf5 -lz
 HWLOC_INCL= -I/opt/local/include
 endif
 # end of Darwin
@@ -81,9 +82,10 @@ HWLOC_LIB = -lhwloc
 # libraries that are included on demand, depending on Config.sh options
 FFTW_INCL =
 FFTW_LIBS =
-HDF5_INCL = -I/usr/include/hdf5/serial/ -DH5_USE_16_API
-HDF5_LIB  = -L/usr/lib/x86_64-linux-gnu/hdf5/serial/ -lhdf5 -lz
+HDF5_INCL = -I/opt/ioa/software/hdf5_gcc/1.10.5_parallel/include -DH5_USE_16_API
+HDF5_LIB  = -L/opt/ioa/software/hdf5_gcc/1.10.5_parallel/lib  -lhdf5 -lz
 HWLOC_INCL=
+CC = mpicc
 endif
 # end of Ubuntu
 
@@ -245,17 +247,32 @@ SUBDIRS += add_backgroundgrid
 endif
 
 ifeq (COOLING,$(findstring COOLING,$(CONFIGVARS)))
-OBJS    += cooling/cooling.o
+OBJS    += cooling/cooling.o 
 INCL    += cooling/cooling_vars.h \
-           cooling/cooling_proto.h
-SUBDIRS += cooling
+           cooling/cooling_proto.h 
+SUBDIRS += cooling 
 endif
 
-ifeq (MOD_LOMBARDI_COOLING,$(findstring MOD_LOMBARDI_COOLING,$(CONFIGVARS)))
-OBJS    += cooling/disc_cooling.o
-INCL    += cooling/cooling_vars.h \
-           cooling/disc_cooling_proto.h
-SUBDIRS += cooling
+ifeq (DISC_COOLING,$(findstring DISC_COOLING,$(CONFIGVARS)))
+OBJS    += cooling/disc_cooling.o 
+INCL    += cooling/disc_cooling_proto.h 
+SUBDIRS += cooling 
+endif
+
+ifeq (TORQUE_FREE_SINK,$(findstring TORQUE_FREE_SINK,$(CONFIGVARS)))
+OBJS    += torque_free_sink/torquefreesink.o
+INCL    += torque_free_sink/torquefreesink.h
+SUBDIRS += torque_free_sink
+endif
+
+ifeq (DUST_STOKES,$(findstring DUST_STOKES,$(CONFIGVARS)))
+OBJS    += hydro/dust.o
+INCL    += hydro/dust.h 
+endif
+
+ifeq (DUST_SIZE,$(findstring DUST_SIZE,$(CONFIGVARS)))
+OBJS    += hydro/dust.o
+INCL    += hydro/dust.h 
 endif
 
 ifeq (FOF,$(findstring FOF,$(CONFIGVARS)))
@@ -358,7 +375,7 @@ build: $(EXEC)
 $(EXEC): $(OBJS)
 	$(LINKER) $(OPTIMIZE) $(OBJS) $(LIBS) -o $(EXEC)
 
-lib$(LIBRARY).a: $(filter-out $(BUILD_DIR)/main/main.o,$(OBJS))
+lib$(LIBRARY).a: $(filter-out $(BUILD_DIR)/main.o,$(OBJS))
 	$(AR) -rcs lib$(LIBRARY).a $(OBJS)
 
 clean:

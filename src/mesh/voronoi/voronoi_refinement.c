@@ -341,6 +341,13 @@ int do_refinements(void)
               SphP[i].Energy *= faci;
               SphP[j].Energy *= facj;
 
+              #ifdef DUST_INCLUDE
+              P[i].DustMass *= faci;
+              P[j].DustMass *= facj;
+              SphP[i].OldDustMass *= faci;
+              SphP[j].OldDustMass *= facj;
+              #endif // #ifdef DUST_INCLUDE
+
 #ifdef MHD
               for(k = 0; k < 3; k++)
                 {
@@ -360,6 +367,11 @@ int do_refinements(void)
                 {
                   SphP[i].Momentum[k] *= faci;
                   SphP[j].Momentum[k] *= facj;
+
+#ifdef DUST_INCLUDE
+                  SphP[i].DustMomentum[k] *= faci;
+                  SphP[j].DustMomentum[k] *= facj;
+#endif //ifdef dust_include
                 }
 
 #ifdef USE_SFR

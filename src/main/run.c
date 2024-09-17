@@ -54,9 +54,26 @@
 #include "../domain/domain.h"
 #include "../mesh/voronoi/voronoi.h"
 
+#ifdef DUST_INCLUDE
+#include "../hydro/dust.h"
+#endif
+
+
+#include <fenv.h>
+
+
 static void do_second_order_source_terms_first_half(void);
 static void do_second_order_source_terms_second_half(void);
 static void create_end_file(void);
+
+#ifdef DUST_INCLUDE
+static void drag_initialise(void);
+static void apply_drag(void);
+#endif /* DUST_INCLUDE */
+
+#ifdef MOD_LOMBARDI_COOLING
+static void cooling_initialise(void);
+#endif
 
 /*! \brief Contains the main simulation loop that iterates over
  *  single timesteps.
@@ -90,21 +107,26 @@ static void create_end_file(void);
  */
 void run(void)
 {
+  //feenableexcept(FE_INVALID);
+
   CPU_Step[CPU_MISC] += measure_time();
 
   if(RestartFlag != 1) /* if we have restarted from restart files, no need to do the setup sequence */
     {
       mark_active_timebins();
-
+      
       output_log_messages();
 
       set_non_standard_physics_for_current_time();
 
       ngb_treefree();
+
       domain_free();
+
       domain_Decomposition(); /* do domain decomposition if needed */
 
       ngb_treeallocate();
+
       ngb_treebuild(NumGas);
 
       calculate_non_standard_physics_prior_mesh_construction();
@@ -194,8 +216,16 @@ void run(void)
           update_timesteps_from_gravity();
 #endif /* #if (defined(SELFGRAVITY) || defined(EXTERNALGRAVITY) || defined(EXACT_GRAVITY_FOR_PARTICLE_TYPE)) && !defined(MESHRELAX) \
         */
-
+       
           do_second_order_source_terms_first_half();
+
+#ifdef DUST_INCLUDE
+          /* Store the gas and dust momenta from the BEGINNING of the timestep */
+          drag_initialise();
+#endif //DUST_INCLUDE
+#ifdef MOD_LOMBARDI_COOLING
+          cooling_initialise();
+#endif
 
           exchange_primitive_variables();
 
@@ -292,6 +322,11 @@ void run(void)
 
       compute_interface_fluxes(&Mesh);
 
+#ifdef DUST_INCLUDE
+      /* Compute drag effect between gas and dust and update momenta accordingly. */
+      apply_drag();
+#endif //DUST_INCLUDE
+
       update_primitive_variables(); /* these effectively closes off the hydro step */
 
       /* the masses and positions are updated, let's get new forces and potentials */
@@ -301,13 +336,195 @@ void run(void)
       do_gravity_step_second_half(); /* this closes off the gravity half-step */
 
       /* do any extra physics, Strang-split (update both primitive and conserved variables as needed ) */
-      calculate_non_standard_physics_end_of_step();
+
+     calculate_non_standard_physics_end_of_step();
     }
 
   restart(0); /* write a restart file at final time - can be used to continue simulation beyond final time */
 
   write_cpu_log(); /* output final cpu measurements */
 }
+
+#ifdef MOD_LOMBARDI_COOLING
+/*! \brief Save old dust and gas momenta for use in drag.
+ *
+ *  \return void
+ */
+void cooling_initialise(void)
+{
+  int idx, i;
+  for(idx = 0; idx < TimeBinsHydro.NActiveParticles; idx++)
+  {
+    i = TimeBinsHydro.ActiveParticleList[idx];
+    if(i < 0)
+      continue;
+    SphP[i].OldUtherm = SphP[i].Utherm;
+  }
+}
+#endif // #ifdef MOD_LOMBARDI_COOLING
+
+#ifdef DUST_INCLUDE
+/*! \brief Save old dust and gas momenta for use in drag.
+ *
+ *  \return void
+ */
+void drag_initialise(void)
+{
+  int idx, i;
+  for(idx = 0; idx < TimeBinsHydro.NActiveParticles; idx++)
+  {
+    i = TimeBinsHydro.ActiveParticleList[idx];
+    if(i < 0)
+      continue;
+    SphP[i].OldDustMomentum[0] = SphP[i].DustMomentum[0];
+    SphP[i].OldDustMomentum[1] = SphP[i].DustMomentum[1];
+    SphP[i].OldDustMomentum[2] = SphP[i].DustMomentum[2];
+
+    SphP[i].OldMomentum[0] = SphP[i].Momentum[0];
+    SphP[i].OldMomentum[1] = SphP[i].Momentum[1];
+    SphP[i].OldMomentum[2] = SphP[i].Momentum[2];
+  }
+}
+
+/*! \brief Drag terms after fluxes are calculated. 
+ *
+ * \return void
+ */
+void apply_drag()
+{
+  int idx, i;
+  for(idx = 0; idx < TimeBinsHydro.NActiveParticles; idx++)
+  {
+    i = TimeBinsHydro.ActiveParticleList[idx];
+    if(i < 0)
+      continue;
+
+    if (i < NumGas){ //ignore ghost points -- there's no need to apply drag since they'll be discarded anyways, and they're fucking us up
+    double atime, hubble_a;
+    if(All.ComovingIntegrationOn)
+    {
+      /* calculate scale factor at middle of timestep */
+      atime    = All.TimeBegin * exp((All.Ti_Current + (((integertime)1) << (P[i].TimeBinHydro - 1))) * All.Timebase_interval);
+      hubble_a = hubble_function(atime);
+    }
+    else
+      atime = hubble_a = 1.0;
+
+    double aBegin = SphP[i].TimeLastPrimUpdate;
+    double dt_cell = All.Time - aBegin; 
+    dt_cell /= hubble_a;
+    dt_cell /= atime;
+
+    // Start by saving the KE before the drag step, to account for heating of the gas later
+    MyFloat KE_before = 0.5 *(  pow(SphP[i].Momentum[0],2) / P[i].Mass + 
+                                pow(SphP[i].Momentum[1],2) / P[i].Mass + 
+                                pow(SphP[i].Momentum[2],2) / P[i].Mass + 
+                                pow(SphP[i].DustMomentum[0],2) / P[i].DustMass +
+                                pow(SphP[i].DustMomentum[1],2) / P[i].DustMass +
+                                pow(SphP[i].DustMomentum[2],2) / P[i].DustMass);
+    
+    //Compute momenta fluxes based on difference between current / old state
+    MyFloat DustMomentumFlux[3];
+    MyFloat MomentumFlux[3];
+
+    DustMomentumFlux[0] = (SphP[i].DustMomentum[0] - SphP[i].OldDustMomentum[0]) / dt_cell;
+    DustMomentumFlux[1] = (SphP[i].DustMomentum[1] - SphP[i].OldDustMomentum[1]) / dt_cell;
+    DustMomentumFlux[2] = (SphP[i].DustMomentum[2] - SphP[i].OldDustMomentum[2]) / dt_cell;
+    
+    MomentumFlux[0] = (SphP[i].Momentum[0] - SphP[i].OldMomentum[0]) / dt_cell;
+    MomentumFlux[1] = (SphP[i].Momentum[1] - SphP[i].OldMomentum[1]) / dt_cell;
+    MomentumFlux[2] = (SphP[i].Momentum[2] - SphP[i].OldMomentum[2]) / dt_cell;
+
+    //Then, compute net drag
+    MyFloat Momentum_COM[3]; //momentum of centre of mass
+    MyFloat rho;             //average density 
+    MyFloat eps_g;           //gas mass fraction
+    MyFloat eps_d;           //dust mass fraction
+    MyFloat dF[3];           //drag in flux term
+    MyFloat d_Mom[3];        //change to momentum due to drag
+
+    double FB = 0;
+    #ifdef DUST_FB
+      FB = 1.0;     // feedback of dust on gas
+    #endif /* #ifdef DUST_FB */
+
+    #ifdef DUST_K
+      double K = DUST_K; //drag coefficient
+    #endif /* #ifdef DUST_K */
+
+    Momentum_COM[0] = SphP[i].Momentum[0] + FB * SphP[i].DustMomentum[0];
+    Momentum_COM[1] = SphP[i].Momentum[1] + FB * SphP[i].DustMomentum[1];
+    Momentum_COM[2] = SphP[i].Momentum[2] + FB * SphP[i].DustMomentum[2];
+
+    rho = (P[i].Mass) + (FB * P[i].DustMass);
+    eps_g = P[i].Mass / rho;
+    eps_d = P[i].DustMass / rho;
+    rho /= SphP[i].Volume;
+
+    #ifdef DUST_STOKES 
+      double stokes = DUST_STOKES;
+      // Dynamical timescale
+      double Posx, Posy, Posz, Radius;
+      double rho_d = rho * eps_d;
+      double rho_g = rho * eps_g;
+      
+      Posx = P[i].Pos[0];
+      Posy = P[i].Pos[1];
+      Posz = P[i].Pos[2];
+      Radius = sqrt( pow(Posx,2) + pow(Posy,2) + pow(Posz,2));
+      double c_s = sqrt(SphP[i].Utherm * (GAMMA-1));
+      //c_s = 500.0;
+      if (c_s != c_s){
+        terminate("c_s is nan -- why?");
+      }
+      
+      //double K = K_from_stokes(c_s, rho_d, rho_g, FB);
+      double K = K_from_stokes(Radius, rho_d, rho_g, FB);
+      //printf(SphP[i].OldDustMomentum[0], SphP[i].OldDustMomentum[1], SphP[i].OldDustMomentum[2]);
+      //printf("K RUN =%f, R=%f, W=%f, t=%f, rho=%f, eps_d=%f, eps_g=%f  \n", K, Radius, Omega, t_stop, rho, eps_d, eps_g);
+    #endif /* #ifdef DUST_STOKES */
+
+    #ifdef DUST_SIZE
+      double rho_d = rho * eps_d;
+      double rho_g = rho * eps_g;
+      double c_s = sqrt(SphP[i].Utherm * (GAMMA) * (GAMMA-1));
+      double K = K_from_size(c_s, rho_d, rho_g, FB);
+    #endif
+
+    
+    dF[0] = eps_g * DustMomentumFlux[0] - eps_d * MomentumFlux[0];
+    dF[1] = eps_g * DustMomentumFlux[1] - eps_d * MomentumFlux[1];
+    dF[2] = eps_g * DustMomentumFlux[2] - eps_d * MomentumFlux[2];
+
+    d_Mom[0] = ( eps_g * SphP[i].OldDustMomentum[0] - eps_d * SphP[i].OldMomentum[0] ) * exp(-K * rho * dt_cell) 
+                             + ( dF[0] * (1.0 - exp(-K * rho * dt_cell)) / (K * rho) );
+    d_Mom[1] = ( eps_g * SphP[i].OldDustMomentum[1] - eps_d * SphP[i].OldMomentum[1] ) * exp(-K * rho * dt_cell) 
+                             + ( dF[1] * (1.0 - exp(-K * rho * dt_cell)) / (K * rho) );
+    d_Mom[2] = ( eps_g * SphP[i].OldDustMomentum[2] - eps_d * SphP[i].OldMomentum[2] ) * exp(-K * rho * dt_cell) 
+                             + ( dF[2] * (1.0 - exp(-K * rho * dt_cell)) / (K * rho) );
+
+    SphP[i].DustMomentum[0] = eps_d * Momentum_COM[0] + d_Mom[0];
+    SphP[i].DustMomentum[1] = eps_d * Momentum_COM[1] + d_Mom[1];
+    SphP[i].DustMomentum[2] = eps_d * Momentum_COM[2] + d_Mom[2];
+
+    SphP[i].Momentum[0] = eps_g * Momentum_COM[0] - FB * d_Mom[0];
+    SphP[i].Momentum[1] = eps_g * Momentum_COM[1] - FB * d_Mom[1];
+    SphP[i].Momentum[2] = eps_g * Momentum_COM[2] - FB * d_Mom[2];
+
+    MyFloat KE_after = 0.5 *(  pow(SphP[i].Momentum[0],2) / P[i].Mass + 
+                               pow(SphP[i].Momentum[1],2) / P[i].Mass + 
+                               pow(SphP[i].Momentum[2],2) / P[i].Mass + 
+                               pow(SphP[i].DustMomentum[0],2) / P[i].DustMass +
+                               pow(SphP[i].DustMomentum[1],2) / P[i].DustMass +
+                               pow(SphP[i].DustMomentum[2],2) / P[i].DustMass);
+
+    SphP[i].Energy += FB * (KE_before - KE_after);
+    }
+  }
+}
+
+#endif //DUST_INCLUDE
+
 
 /*! \brief Source terms before hydrodynamics timestep.
  *
@@ -380,6 +597,9 @@ void calculate_non_standard_physics_prior_mesh_construction(void)
 #if defined(COOLING) && defined(USE_SFR)
   sfr_create_star_particles();
 #endif /* #if defined(COOLING) && defined(USE_SFR) */
+#ifdef MOD_LOMBARDI_COOLING
+  cooling_initialise();
+#endif
 }
 
 /*! \brief Calls extra modules at the end of the run loop.
@@ -398,6 +618,19 @@ void calculate_non_standard_physics_end_of_step(void)
   cooling_only();
 #endif /* #ifdef USE_SFR #else */
 #endif /* #ifdef COOLING */
+
+#ifdef MOD_LOMBARDI_COOLING
+  lombardi_cooling();
+#endif // #ifdef LOMBARDI_COOLING
+
+#ifdef BETA_COOLING 
+  cooling_only_Beta();
+#endif // #ifdef MOD_LOMBARDI_COOLING
+
+#ifdef TORQUE_FREE_SINK
+  remove_mass_in_sink_zone();
+#endif // #ifdef TORQUE_FREE_SINK
+
 }
 
 /*! \brief Checks whether the run must interrupted.

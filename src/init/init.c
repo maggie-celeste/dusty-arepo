@@ -437,6 +437,21 @@ int init(void)
       SphP[i].Momentum[1] = P[i].Mass * P[i].Vel[1];
       SphP[i].Momentum[2] = P[i].Mass * P[i].Vel[2];
 
+
+#ifdef DUST_INCLUDE
+      if(RestartFlag == 0)
+        {
+#ifdef READ_MASS_AS_DENSITY_IN_INPUT
+          P[i].DustMass *= SphP[i].Volume;
+#endif /* #ifdef READ_MASS_AS_DENSITY_IN_INPUT */
+        }
+      SphP[i].DustDensity = P[i].DustMass / SphP[i].Volume;
+
+      SphP[i].DustMomentum[0] = P[i].DustMass * SphP[i].DustVel[0];
+      SphP[i].DustMomentum[1] = P[i].DustMass * SphP[i].DustVel[1];
+      SphP[i].DustMomentum[2] = P[i].DustMass * SphP[i].DustVel[2];
+#endif
+
 #ifdef MHD
 #ifdef MHD_SEEDFIELD
       if(RestartFlag == 0)

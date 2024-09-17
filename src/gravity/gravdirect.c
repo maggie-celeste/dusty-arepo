@@ -111,8 +111,12 @@ void gravity_direct(int timebin)
           for(k = 0; k < 3; k++)
             DirectDataIn[Nforces].Pos[k] = P[i].Pos[k];
         }
-
+  
+#ifdef DUST_INCLUDE
+      DirectDataIn[Nforces].Mass = P[i].Mass + P[i].DustMass;
+#else
       DirectDataIn[Nforces].Mass = P[i].Mass;
+#endif //ifdef DUST_INCLUDE
 
       DirectDataIn[Nforces].Type          = P[i].Type;
       DirectDataIn[Nforces].SofteningType = P[i].SofteningType;

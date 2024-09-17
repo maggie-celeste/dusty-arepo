@@ -265,6 +265,14 @@ void exchange_primitive_variables(void)
               tmpPrimExch[off].ActiveArea   = SphP[place].ActiveArea;
               tmpPrimExch[off].TimeBinHydro = P[place].TimeBinHydro;
 
+#ifdef DUST_INCLUDE
+              tmpPrimExch[off].DustDensity = SphP[place].DustDensity;
+              tmpPrimExch[off].OldDustMass = SphP[place].OldDustMass;
+              tmpPrimExch[off].VelDust[0] = SphP[place].DustVel[0];
+              tmpPrimExch[off].VelDust[1] = SphP[place].DustVel[1];
+              tmpPrimExch[off].VelDust[2] = SphP[place].DustVel[2];
+#endif //DUST_INCLUDE
+
 #ifdef MAXSCALARS
               for(j = 0; j < N_Scalar; j++)
                 tmpPrimExch[off].Scalars[j] = *(MyFloat *)(((char *)(&SphP[place])) + scalar_elements[j].offset);
@@ -342,6 +350,11 @@ void exchange_primitive_variables_and_gradients(void)
       if(P[p].Mass < SphP[p].OldMass)
         SphP[p].OldMass = P[p].Mass;
 
+#ifdef DUST_INCLUDE
+      if(P[p].DustMass < SphP[p].OldDustMass)
+        SphP[p].OldDustMass = P[p].DustMass;
+#endif //DUST_INCLUDE
+
       listp = List_P[p].firstexport;
       while(listp >= 0)
         {
@@ -353,6 +366,14 @@ void exchange_primitive_variables_and_gradients(void)
               tmpPrimExch[off].Volume   = SphP[place].Volume;
               tmpPrimExch[off].Density  = SphP[place].Density;
               tmpPrimExch[off].Pressure = SphP[place].Pressure;
+
+#ifdef DUST_INCLUDE
+              tmpPrimExch[off].DustDensity = SphP[place].DustDensity;
+              tmpPrimExch[off].OldDustMass = SphP[place].OldDustMass;
+              tmpPrimExch[off].VelDust[0] = SphP[place].DustVel[0];
+              tmpPrimExch[off].VelDust[1] = SphP[place].DustVel[1];
+              tmpPrimExch[off].VelDust[2] = SphP[place].DustVel[2];
+#endif //DUST_INCLUDE
 
 #ifdef MHD
               tmpPrimExch[off].B[0] = SphP[place].B[0];

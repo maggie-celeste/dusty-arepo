@@ -158,6 +158,11 @@ static void gravity_external_get_force(double pos[3], int type, MyIDType ID, dou
   *pot = -(EXTERNALGY)*pos[1];
 #endif /* #ifdef EXTERNALGY */
 
+#ifdef EXTERNALGX
+  acc[0] += EXTERNALGX;
+  *pot = -(EXTERNALGX)*pos[0];
+#endif /* #ifdef EXTERNALGX */
+
 #ifdef STATICISO
   {
     double r, m;
@@ -235,6 +240,139 @@ static void gravity_external_get_force(double pos[3], int type, MyIDType ID, dou
       }
   }
 #endif /* #ifdef STATICHQ */
+
+//TODO: ADD A FUNCTION FOR OMEGA(R)
+#ifdef GALACTIC_POTENTIAL       /* 2D galactic potential -  flat rotation curve */
+  {
+    static double v0    = 1.0 ;
+    static double R0    = 1.0 ;
+    static double eps_b = 1.0 ;
+    static double F_b   = 0 ;
+    static double eps_d = 17/3. ;
+
+    static double vmax ;
+    void init_galactic_potential()
+      {
+        vmax = v0 / sqrt(F_b*eps_b*R0*exp(-eps_b*R0) + 1. - exp(-eps_d*R0)) ;
+      }
+
+    double Fr_gal(double R)
+      {
+        return - vmax*vmax*(F_b*eps_b*R*exp(-eps_b*R) + 1 - exp(-eps_d*R)) / R ;
+      }
+
+    /* Initialize the first time we call this function */
+    static int init = 0 ;
+    if (!init) 
+      {
+        init_galactic_potential() ;
+        init = 1 ;
+      }    
+    
+    double R, a;
+    double dx, dy;
+
+
+    dx = pos[0] - boxHalf_X;
+    dy = pos[1] - boxHalf_Y;
+
+    R = sqrt(dx * dx + dy * dy);
+    /*ONLY want to add galactic potential if inside galactic radius...*/
+    if (R==0)
+    {
+      printf("grav_external.c: Correcting a division by zero...\n R=%f, dx=%f, dy=%f", R, dx, dy);
+      R=1e-6;
+    }
+      a = Fr_gal(R) / R;
+
+      acc[0] += a * dx;
+      acc[1] += a * dy;
+#ifdef DUST_INCLUDE
+
+#endif /* DUST_INCLUDE */
+    
+    /*printf("\n Accelerations:%f, %f, %f, %f", acc[0], acc[1], vmax, R);*/
+
+#ifdef SPIRAL_PERTURBATION /* Logarithmic spiral purturbations */
+  {
+    static double eps_s = 0.85 ;
+    static int        m = 2 ;
+    static double sin_i = 0.1 ;
+    static double omg_P = 0.522 ;
+    static double    F0 = 0.05 ;
+
+    static double A0, tan_i ;
+    void init_spiral_potential()
+      {
+        A0 = R0 * v0 * v0 * F0 * sin_i / (R0 * R0 * m  * exp(-eps_s*R0));
+        tan_i = sin_i / sqrt(1 - sin_i*sin_i) ;
+      }
+
+    // Co-ordinate conversion
+    double eta_spiral(double R, double theta)
+      {
+        return  (m/tan_i)*log(eps_s*R) + m * (theta - omg_P * All.Time) + M_PI ;
+      }
+    double Xi_spiral(double R, double theta)
+      {
+        return - m*log(eps_s*R) + (m / tan_i) * (theta - omg_P * All.Time) ;
+      }
+
+    // Forces:
+    //  - Use R in normal co-ordinates
+    //  -     eta from spiral co-ordinated  
+
+    // Radial force from sprial pertubation
+    double Fr_spiral(double R, double eta)
+      {
+        double X = M_PI - eta ;
+        return -A0 * exp(-eps_s*R)*((1 - eps_s * R)*cos(X) - (-m/tan_i)*sin(X)) ;
+      }
+    // Azimuthal force from the spiral
+    double Faz_spiral(double R, double eta)
+      {
+        double X = M_PI - eta ;
+        return -A0 * exp(-eps_s*R) * m * sin(X) ;
+      }
+
+      /* Initialize the first time we call this function */
+    static int init_spiral = 0 ;
+    if (!init_spiral) 
+      {
+        init_spiral_potential() ;
+        init_spiral = 1 ;
+      }
+    
+
+    double dx, dy;
+    dx = pos[0] - boxHalf_X;
+    dy = pos[1] - boxHalf_Y;
+    
+    R = sqrt(dx * dx + dy * dy);
+    if (R==0)
+    {
+      printf("grav_external.c: Correcting a division by zero...\n R=%f, dx=%f, dy=%f", R, dx, dy);
+      R=1e-6;
+    }
+    double theta, eta ;
+
+    theta = atan2(dy, dx) ;
+    eta = eta_spiral(R,theta) ;
+
+    /* radial contribution */
+    a = Fr_spiral(R,eta) / R ;
+    acc[0] += a * dx;
+    acc[1] += a * dy;
+
+    /* azimuthal contribution */
+    a = Faz_spiral(R,eta) / R ;
+    acc[0] -= a * dy;
+    acc[1] += a * dx;
+    
+  }
+  #endif /* #ifdef SPIRAL_PERTURBATION */
+  }
+#endif /* #ifdef GALACTIC_POTENTIAL */
 }
 #endif /* #ifdef EXTERNALGRAVITY */
 

@@ -64,6 +64,9 @@ static inline void kick_particle(int i, double dt_gravkick, MySingle* Grav)
 {
   int j;
   double dvel[3];
+#ifdef DUST_INCLUDE
+  double dvel_dust[3];
+#endif //DUST_INCLUDE
   if(P[i].Type == 0)
     {
       SphP[i].Energy -= 0.5 * P[i].Mass * (P[i].Vel[0] * P[i].Vel[0] + P[i].Vel[1] * P[i].Vel[1] + P[i].Vel[2] * P[i].Vel[2]);
@@ -72,6 +75,12 @@ static inline void kick_particle(int i, double dt_gravkick, MySingle* Grav)
           dvel[j] = Grav[j] * dt_gravkick;
           P[i].Vel[j] += dvel[j];
           SphP[i].Momentum[j] += P[i].Mass * dvel[j];
+
+#ifdef DUST_INCLUDE
+          dvel_dust[j] = Grav[j] * dt_gravkick;
+          SphP[i].DustVel[j] += dvel_dust[j];
+          SphP[i].DustMomentum[j] += P[i].DustMass * dvel_dust[j];
+#endif //DUST_INCLUDE
         }
       SphP[i].Energy += 0.5 * P[i].Mass * (P[i].Vel[0] * P[i].Vel[0] + P[i].Vel[1] * P[i].Vel[1] + P[i].Vel[2] * P[i].Vel[2]);
     }

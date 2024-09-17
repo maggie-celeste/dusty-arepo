@@ -54,6 +54,24 @@
 #include "../cooling/cooling_proto.h"
 #endif /* #if defined(COOLING) */
 
+#if defined(DISC_COOLING)
+#include "../cooling/disc_cooling_proto.h"
+#endif /* #if defined(DISC_COOLING) */
+
+#if defined(TORQUE_FREE_SINK)
+#include "../torque_free_sink/torquefreesink.h"
+void remove_mass_in_sink_zone(void);
+#endif // #ifdeftorque_free_sink
+
+#ifdef DUST_STOKES
+#include "../hydro/dust.h"
+#endif
+
+#ifdef DUST_SIZE
+#include "../hydro/dust.h"
+#endif
+
+
 void sfr_init();
 void sfr_create_star_particles(void);
 void ngb_finish_rangebounds_update(int nchanged, int *nodelist);

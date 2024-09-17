@@ -448,10 +448,18 @@ int force_treebuild_construct(int npart, int optimized_domain_mapping, int inser
 
 #ifdef PLACEHIGHRESREGION
       if(pmforce_is_particle_high_res(P[i].Type, &Tree_Pos_list[3 * i]))
+#ifdef DUST_INCLUDE
+        mass_highres += P[i].Mass + P[i].DustMass;
+#else
         mass_highres += P[i].Mass;
+#endif // #ifdef DUST_INCLUDE
       else
 #endif /* #ifdef PLACEHIGHRESREGION */
+#ifdef DUST_INCLUDE
+        mass_lowres += P[i].Mass + P[i].DustMass;
+#else
         mass_lowres += P[i].Mass;
+#endif // #ifdef DUST_INCLUDE
     }
   double mass_pmregions[2] = {mass_lowres, mass_highres};
   MPI_Allreduce(mass_pmregions, All.MassPMregions, 2, MPI_DOUBLE, MPI_SUM, MPI_COMM_WORLD);
@@ -703,7 +711,11 @@ int force_treebuild_construct(int npart, int optimized_domain_mapping, int inser
           export_Tree_Points[n].IntPos[0]     = Tree_IntPos_list[3 * i + 0];
           export_Tree_Points[n].IntPos[1]     = Tree_IntPos_list[3 * i + 1];
           export_Tree_Points[n].IntPos[2]     = Tree_IntPos_list[3 * i + 2];
+#ifdef DUST_INCLUDE
+          export_Tree_Points[n].Mass          = P[i].Mass + P[i].DustMass;
+#else 
           export_Tree_Points[n].Mass          = P[i].Mass;
+#endif //ifdef DUST_INCLUDE
           export_Tree_Points[n].OldAcc        = P[i].OldAcc;
           export_Tree_Points[n].SofteningType = P[i].SofteningType;
           export_Tree_Points[n].index         = i;
@@ -1029,7 +1041,11 @@ void force_assign_cost_values(void)
             while(no >= 0)
               {
                 if(Nodes[no].u.d.mass > 0)
+#ifdef DUST_INCLUDE
+                  sum += Thread[0].Node_CostCount[no] * ((P[i].Mass  + P[i].DustMass) / Nodes[no].u.d.mass);
+#else
                   sum += Thread[0].Node_CostCount[no] * (P[i].Mass / Nodes[no].u.d.mass);
+#endif //ifdef DUST_INCLUDE
 
                 no = Nodes[no].u.d.father;
               }
@@ -1283,17 +1299,28 @@ void force_update_node_recursive(int no, int sib, int father, int *last)
                 {
                   MyDouble *pos = &Tree_Pos_list[3 * p];
 
+#ifdef DUST_INCLUDE
+                  mass += P[p].Mass + P[p].DustMass;
+                  s[0] += (P[p].Mass + P[p].DustMass) * pos[0];
+                  s[1] += (P[p].Mass + P[p].DustMass) * pos[1];
+                  s[2] += (P[p].Mass + P[p].DustMass) * pos[2];
+#else
                   mass += P[p].Mass;
                   s[0] += P[p].Mass * pos[0];
                   s[1] += P[p].Mass * pos[1];
                   s[2] += P[p].Mass * pos[2];
+#endif // #ifdef DUST_INCLUDE
 
                   if(All.ForceSoftening[maxsofttype] < All.ForceSoftening[P[p].SofteningType])
                     maxsofttype = P[p].SofteningType;
 
 #ifdef MULTIPLE_NODE_SOFTENING
 #ifdef ADAPTIVE_HYDRO_SOFTENING
+#ifdef DUST_INCLUDE
+                  mass_per_type[P[p].Type == 0 ? 0 : P[p].SofteningType] += P[p].Mass + SphP[p].DustMass;
+#else
                   mass_per_type[P[p].Type == 0 ? 0 : P[p].SofteningType] += P[p].Mass;
+#endif //#ifdef DUST_INCLUDE
 
                   if(P[p].Type == 0)
                     {
@@ -1303,7 +1330,11 @@ void force_update_node_recursive(int no, int sib, int father, int *last)
                         minhydrosofttype = P[p].SofteningType;
                     }
 #else  /* #ifdef ADAPTIVE_HYDRO_SOFTENING */
+#ifdef DUST_INCLUDE
+                  mass_per_type[P[p].SofteningType] += P[p].Mass + P[p].DustMass;
+#else
                   mass_per_type[P[p].SofteningType] += P[p].Mass;
+#endif //#ifdef DUST_INCLUDE
 #endif /* #ifdef ADAPTIVE_HYDRO_SOFTENING #else */
 #endif /* #ifdef MULTIPLE_NODE_SOFTENING */
                 }

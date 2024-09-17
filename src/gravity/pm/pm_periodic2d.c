@@ -375,7 +375,13 @@ void pm2d_force_periodic(int mode)
       dx = to_slab_fac * P[pindex].Pos[0] - slab_x;
       dy = to_slab_fac * P[pindex].Pos[1] - slab_y;
 
+      
+
+#ifdef DUST_INCLUDE
+      weight = P[pindex].Mass + P[pindex].DustMass;
+#else
       weight = P[pindex].Mass;
+#endif // #ifdef DUST_INCLUDE
 
       localfield_d_data[part[i + 0].localindex] += weight * (1.0 - dx) * (1.0 - dy);
       localfield_d_data[part[i + 1].localindex] += weight * (1.0 - dx) * dy;

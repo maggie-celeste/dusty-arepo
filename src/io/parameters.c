@@ -417,7 +417,6 @@ void read_parameter_file(char *fname)
       id[nt++] = STRING;
 #endif /* #if defined(MOD_LOMBARDI_COOLING) */
 
-
 #if defined(REFINEMENT)
       strcpy(tag[nt], "ReferenceGasPartMass");
       addr[nt] = &All.ReferenceGasPartMass;

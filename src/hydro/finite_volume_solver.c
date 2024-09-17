@@ -96,6 +96,7 @@
 
 #include "../main/allvars.h"
 #include "../main/proto.h"
+#include "../hydro/dust.h"
 
 #include "../mesh/voronoi/voronoi.h"
 
@@ -105,6 +106,11 @@ static struct flux_list_data
 {
   int task, index;
   double dM, dP[3];
+
+#ifdef DUST_INCLUDE
+  double dMD, dPD[3];
+#endif /*ifdef DUST_INCLUDE */
+  
 #ifdef MHD
   double dB[3];
 #endif /* #ifdef MHD */
@@ -202,10 +208,10 @@ void compute_interface_fluxes(tessellation *T)
       /* get the values of the states at the center of the cells */
       if(face_get_state(T, VF[i].p1, i, &state_center_L))
         continue;
-
+      
       if(face_get_state(T, VF[i].p2, i, &state_center_R))
         continue;
-
+      
       /* only treat faces where one of the two sides is active */
       if(!TimeBinSynchronized[state_center_L.timeBin] && !TimeBinSynchronized[state_center_R.timeBin])
         continue;
@@ -283,6 +289,9 @@ void compute_interface_fluxes(tessellation *T)
       /* copy center state to state at interface, then add extrapolation terms */
       state_L = state_center_L;
       state_R = state_center_R;
+      
+      struct state state_L_before = state_center_L;
+      struct state state_R_before = state_center_R;
 
       face_do_time_extrapolation(&delta_time_L, &state_center_L, atime);
       face_do_time_extrapolation(&delta_time_R, &state_center_R, atime);
@@ -313,6 +322,7 @@ void compute_interface_fluxes(tessellation *T)
         {
           printf("i=%d press_L=%g press_R=%g rho_L=%g rho_R=%g\n", i, state_L.press, state_R.press, state_L.rho, state_R.rho);
           printf("area=%g lx=%g ly=%g   rx=%g ry=%g\n", VF[i].area, state_L.dx, state_L.dy, state_R.dx, state_R.dy);
+          printf("BEFORE VALUES: press_L=%g press_R=%g rho_L=%g rho_R=%g\n", state_L_before.press, state_R_before.press, state_L_before.rho, state_R_before.rho);
           terminate("found crazy values");
         }
 #else  /* #ifndef ISOTHERM_EQS */
@@ -328,6 +338,12 @@ void compute_interface_fluxes(tessellation *T)
       /* mirror velocity in case of reflecting boundaries */
       face_boundary_check(&T->DP[VF[i].p1], &state_L.velx, &state_L.vely, &state_L.velz);
       face_boundary_check(&T->DP[VF[i].p2], &state_R.velx, &state_R.vely, &state_R.velz);
+
+#ifdef DUST_INCLUDE
+/* mirror velocity in case of reflecting boundaries */
+      face_boundary_check(&T->DP[VF[i].p1], &state_L.velx_dust, &state_L.vely_dust, &state_L.velz_dust);
+      face_boundary_check(&T->DP[VF[i].p2], &state_R.velx_dust, &state_R.vely_dust, &state_R.velz_dust);
+#endif /* #ifdef DUST_INCLUDE */
 
 #ifdef MHD
       /* mirror magnetic field in case of reflecting boundaries */
@@ -374,6 +390,12 @@ void compute_interface_fluxes(tessellation *T)
       state_face.velx += vel_face[0];
       state_face.vely += vel_face[1];
       state_face.velz += vel_face[2];
+
+#ifdef DUST_INCLUDE
+      state_face.velx_dust += vel_face[0];
+      state_face.vely_dust += vel_face[1];
+      state_face.velz_dust += vel_face[2];
+#endif
 
 #ifndef MESHRELAX
 
@@ -425,7 +447,7 @@ void compute_interface_fluxes(tessellation *T)
       face_set_scalar_states_and_fluxes(&state_L, &state_R, &state_face, &fluxes);
 
 #endif /* #ifndef MESHRELAX #else */
-
+    
 #ifndef ISOTHERM_EQS
       if(!gsl_finite(fluxes.energy))
         {
@@ -434,7 +456,13 @@ void compute_interface_fluxes(tessellation *T)
                  state_L.press);
           printf("rho_R=%g velx_R=%g vely_R=%g velz_R=%g press_R=%g\n", state_R.rho, state_R.velx, state_R.vely, state_R.velz,
                  state_R.press);
+          #ifdef DUST_INCLUDE
+          printf("DUST rho_L=%g velx_L=%g vely_L=%g velz_L=%g\n", state_L.rhodust, state_L.velx_dust, state_L.vely_dust, state_L.velz_dust);
+          printf("DUST rho_R=%g velx_R=%g vely_R=%g velz_R=%g\n", state_R.rhodust, state_R.velx_dust, state_R.vely_dust, state_R.velz_dust);
+          //printf("DUST state face rho=%g, vel=%g")
+          #endif
           print_particle_info(i);
+          fflush(stdout);
           terminate("infinity encountered");
         }
 #endif /* #ifndef ISOTHERM_EQS */
@@ -501,6 +529,13 @@ void compute_interface_fluxes(tessellation *T)
                   SphP[p].Momentum[0] += dir * fluxes.momentum[0];
                   SphP[p].Momentum[1] += dir * fluxes.momentum[1];
                   SphP[p].Momentum[2] += dir * fluxes.momentum[2];
+
+#ifdef DUST_INCLUDE
+                  P[p].DustMass       += dir * fluxes.dustmass;
+                  SphP[p].DustMomentum[0] += dir * fluxes.dustmomentum[0];
+                  SphP[p].DustMomentum[1] += dir * fluxes.dustmomentum[1];
+                  SphP[p].DustMomentum[2] += dir * fluxes.dustmomentum[2];
+#endif
 
 #ifdef MHD
                   SphP[p].BConserved[0] += dir * fluxes.B[0];
@@ -593,6 +628,13 @@ void compute_interface_fluxes(tessellation *T)
                   FluxList[Nflux].dP[1] = dir * fluxes.momentum[1];
                   FluxList[Nflux].dP[2] = dir * fluxes.momentum[2];
 
+#ifdef DUST_INCLUDE
+                  FluxList[Nflux].dMD = dir * fluxes.dustmass;
+                  FluxList[Nflux].dPD[0] = dir * fluxes.dustmomentum[0];
+                  FluxList[Nflux].dPD[1] = dir * fluxes.dustmomentum[1];
+                  FluxList[Nflux].dPD[2] = dir * fluxes.dustmomentum[2];
+#endif  /* #ifdef DUST_INCLUDE */
+
 #if !defined(ISOTHERM_EQS)
                   FluxList[Nflux].dEnergy = dir * fluxes.energy;
 #endif /* #if !defined(ISOTHERM_EQS)  */
@@ -671,7 +713,7 @@ void compute_interface_fluxes(tessellation *T)
   myfree(FluxList);
 
   double in[2] = {count, count_reduced}, out[2];
-  MPI_Reduce(in, out, 2, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD);
+  MPI_Reduce(in, out, 2, MPI_DOUBLE, MPI_SUM, 0, MPI_COMM_WORLD); 
   if(ThisTask == 0)
     {
       tot_count         = out[0];
@@ -784,6 +826,7 @@ int face_get_state(tessellation *T, int p, int i, struct state *st)
   if(particle >= NumGas && DP[p].task == ThisTask)
     particle -= NumGas;
 
+  //MAGGIE: I think this is what they mean by performing reconstruction using the old s_i -- this dx is used.
   /* interpolation vector for the left state */
   if(DP[p].task == ThisTask)
     {
@@ -845,6 +888,14 @@ int face_get_state(tessellation *T, int p, int i, struct state *st)
 
       st->volume = SphP[particle].Volume;
 
+#ifdef DUST_INCLUDE
+      st->rhodust = SphP[particle].DustDensity;
+
+      st->velDust[0] = SphP[particle].DustVel[0];
+      st->velDust[1] = SphP[particle].DustVel[1];
+      st->velDust[2] = SphP[particle].DustVel[2];
+#endif
+
 #ifdef MHD
       st->Bx = SphP[particle].B[0];
       st->By = SphP[particle].B[1];
@@ -862,6 +913,9 @@ int face_get_state(tessellation *T, int p, int i, struct state *st)
       aBegin = SphP[particle].TimeLastPrimUpdate;
 
       st->oldmass     = SphP[particle].OldMass;
+#ifdef DUST_INCLUDE      
+      st->olddustmass = SphP[particle].OldDustMass;
+#endif
       st->surfacearea = SphP[particle].SurfaceArea;
       st->activearea  = SphP[particle].ActiveArea;
       st->csnd        = get_sound_speed(particle);
@@ -879,6 +933,12 @@ int face_get_state(tessellation *T, int p, int i, struct state *st)
 
       st->rho = PrimExch[particle].Density;
 
+#ifdef DUST_INCLUDE
+      st->rhodust = PrimExch[particle].DustDensity;
+      st->velDust[0] = PrimExch[particle].VelDust[0];
+      st->velDust[1] = PrimExch[particle].VelDust[1];
+      st->velDust[2] = PrimExch[particle].VelDust[2];
+#endif
       st->press = PrimExch[particle].Pressure;
 
       st->grad = &GradExch[particle];
@@ -904,6 +964,9 @@ int face_get_state(tessellation *T, int p, int i, struct state *st)
       aBegin = PrimExch[particle].TimeLastPrimUpdate;
 
       st->oldmass     = PrimExch[particle].OldMass;
+#ifdef DUST_INCLUDE      
+      st->olddustmass = PrimExch[particle].OldDustMass;
+#endif
       st->surfacearea = PrimExch[particle].SurfaceArea;
       st->activearea  = PrimExch[particle].ActiveArea;
       st->csnd        = PrimExch[particle].Csnd;
@@ -1132,6 +1195,12 @@ void state_convert_to_local_frame(struct state *st, double *vel_face, double hub
   st->vely = st->velGas[1] - vel_face[1];
   st->velz = st->velGas[2] - vel_face[2];
 
+#ifdef DUST_INCLUDE
+  st->velx_dust = st->velDust[0] - vel_face[0];
+  st->vely_dust = st->velDust[1] - vel_face[1];
+  st->velz_dust = st->velDust[2] - vel_face[2];
+#endif
+
   if(All.ComovingIntegrationOn)
     {
       st->velx -= atime * hubble_a * st->dx; /* need to get the physical velocity relative to the face */
@@ -1139,6 +1208,7 @@ void state_convert_to_local_frame(struct state *st, double *vel_face, double hub
       st->velz -= atime * hubble_a * st->dz;
     }
 }
+//MAGGIE: So, this conversion to the local frame changes the velocities, but doesn't change the interpolation dx. 
 
 /*! \brief Extrapolates the state in time.
  *
@@ -1175,6 +1245,22 @@ void face_do_time_extrapolation(struct state *delta, struct state *st, double at
 
   delta->rho = -dt_half * (st->velx * grad->drho[0] + st->rho * grad->dvel[0][0] + st->vely * grad->drho[1] +
                            st->rho * grad->dvel[1][1] + st->velz * grad->drho[2] + st->rho * grad->dvel[2][2]);
+
+#ifdef DUST_INCLUDE
+  delta->rhodust = -dt_half * (st->velx_dust * grad->drhodust[0] + st->rhodust * grad->dvel_dust[0][0] 
+                             + st->vely_dust * grad->drhodust[1] + st->rhodust * grad->dvel_dust[1][1] 
+                             + st->velz_dust * grad->drhodust[2] + st->rhodust * grad->dvel_dust[2][2]);
+
+  delta->velx_dust = -dt_half * ( st->velx_dust * grad->dvel_dust[0][0] + st->vely_dust * grad->dvel_dust[0][1] +
+                                  st->velz_dust * grad->dvel_dust[0][2]);
+
+  delta->vely_dust = -dt_half * ( st->velx_dust * grad->dvel_dust[1][0] + st->vely_dust * grad->dvel_dust[1][1] +
+                                  st->velz_dust * grad->dvel_dust[1][2]);
+                                  
+  delta->velz_dust = -dt_half * ( st->velx_dust * grad->dvel_dust[2][0] + st->vely_dust * grad->dvel_dust[2][1] +
+                                  st->velz_dust * grad->dvel_dust[2][2]);
+
+#endif /* #ifdef DUST_INCLUDE */
 
   delta->velx = -dt_half * (1.0 / st->rho * grad->dpress[0] + st->velx * grad->dvel[0][0] + st->vely * grad->dvel[0][1] +
                             st->velz * grad->dvel[0][2]);
@@ -1226,6 +1312,11 @@ void face_do_time_extrapolation(struct state *delta, struct state *st, double at
           -dt_half * (st->velx * grad->dscalars[k][0] + st->vely * grad->dscalars[k][1] + st->velz * grad->dscalars[k][2]);
     }
 #endif /* #if defined(MAXSCALARS) */
+
+  // Maggie: update to dx to match Zier & Volkerspringel 2022
+  st->dx = st->dx + st->velx * dt_half;
+  st->dy = st->dy + st->vely * dt_half;
+  st->dz = st->dz + st->velz * dt_half;
 }
 
 /*! \brief Extrapolates the state in space.
@@ -1264,8 +1355,14 @@ void face_do_spatial_extrapolation(struct state *delta, struct state *st, struct
   r[0] = -st_other->dx + st->dx;
   r[1] = -st_other->dy + st->dy;
   r[2] = -st_other->dz + st->dz;
-
   face_do_spatial_extrapolation_single_quantity(&delta->rho, st->rho, st_other->rho, grad->drho, dx, r);
+#ifdef DUST_INCLUDE
+  face_do_spatial_extrapolation_single_quantity(&delta->rhodust, st->rhodust, st_other->rhodust, grad->drhodust, dx, r);
+
+  face_do_spatial_extrapolation_single_quantity(&delta->velx_dust, st->velx_dust, st_other->velx_dust, grad->dvel_dust[0], dx, r);
+  face_do_spatial_extrapolation_single_quantity(&delta->vely_dust, st->vely_dust, st_other->vely_dust, grad->dvel_dust[1], dx, r);
+  face_do_spatial_extrapolation_single_quantity(&delta->velz_dust, st->velz_dust, st_other->velz_dust, grad->dvel_dust[2], dx, r);
+#endif
 
   face_do_spatial_extrapolation_single_quantity(&delta->velx, st->velx, st_other->velx, grad->dvel[0], dx, r);
   face_do_spatial_extrapolation_single_quantity(&delta->vely, st->vely, st_other->vely, grad->dvel[1], dx, r);
@@ -1283,8 +1380,7 @@ void face_do_spatial_extrapolation(struct state *delta, struct state *st, struct
   int k;
   for(k = 0; k < N_Scalar; k++)
     {
-      face_do_spatial_extrapolation_single_quantity(&delta->scalars[k], st->scalars[k], st_other->scalars[k], grad->dscalars[k], dx,
-                                                    r);
+      face_do_spatial_extrapolation_single_quantity(&delta->scalars[k], st->scalars[k], st_other->scalars[k], grad->dscalars[k], dx,r);
     }
 #endif /* #ifdef MAXSCALARS */
 }
@@ -1321,16 +1417,25 @@ void face_do_spatial_extrapolation_single_quantity(double *delta, double st, dou
  */
 void face_add_extrapolations(struct state *st_face, struct state *delta_time, struct state *delta_space, struct fvs_stat *stat)
 {
+  //Start by checking the densities don't become negative, as this will apply with or without drag.
+  // We'll skip extrapolation where these variables do become negative.
   stat->count_disable_extrapolation += 1;
-
   if(st_face->rho <= 0)
     return;
 
   if(st_face->rho + delta_time->rho + delta_space->rho < 0 || st_face->press + delta_time->press + delta_space->press < 0)
     return;
 
-  stat->count_disable_extrapolation -= 1;
+#ifdef DUST_INCLUDE 
+  if(st_face->rhodust <= 0)
+    return;
 
+  if(st_face->rhodust + delta_time->rhodust + delta_space->rhodust < 0)
+    return;
+#endif //ifdef DUST_INCLUDE
+    stat->count_disable_extrapolation -= 1;
+
+  // Now, extrapolations
 #if !defined(MESHRELAX) && !defined(DISABLE_TIME_EXTRAPOLATION)
   face_add_extrapolation(st_face, delta_time, stat);
 #endif /* #if !defined(MESHRELAX) && !defined(DISABLE_TIME_EXTRAPOLATION)  */
@@ -1338,6 +1443,116 @@ void face_add_extrapolations(struct state *st_face, struct state *delta_time, st
 #if !defined(DISABLE_SPATIAL_EXTRAPOLATION)
   face_add_extrapolation(st_face, delta_space, stat);
 #endif /* #if !defined(DISABLE_SPATIAL_EXTRAPOLATION) */
+
+  // It's possible the inclusion of this drag step will allow for pressure < 0.
+  // If that occurs, we'll correct it after face_add_extrapolations has been called.
+  // Since we have to do all the drag work either way, it's not as worthwhile adding a skip statement as in the previous < 0 cases.
+#ifdef DUST_INCLUDE 
+  double velx_0, velx_dust_0, vely_0, vely_dust_0, velz_0, velz_dust_0;
+  velx_0 = st_face->velx;
+  vely_0 = st_face->vely;
+  velz_0 = st_face->velz;
+  velx_dust_0 = st_face->velx_dust;
+  vely_dust_0 = st_face->vely_dust;
+  velz_dust_0 = st_face->velz_dust;
+  
+  double dt_half = st_face->dtExtrapolation;
+  if( dt_half != 0) // only apply drag term when time has passed since last primitive update...
+  {
+    // Start by saving the KE before the drag step, to account for heating of the gas later
+    double KE_before = 0.5 * ( st_face->rho * pow(st_face->velx,2) + 
+                               st_face->rho * pow(st_face->vely,2) + 
+                               st_face->rho * pow(st_face->velz,2) + 
+                               st_face->rhodust * pow(st_face->velx_dust,2) +
+                               st_face->rhodust * pow(st_face->vely_dust,2) +
+                               st_face->rhodust * pow(st_face->velz_dust,2) );
+                               
+    double rho, v_com[3], dV[3], da[3];
+    double FB = 0;
+    #ifdef DUST_FB
+      FB = 1.0;  // feedback of dust on gas
+    #endif /* #ifdef DUST_FB */
+
+    #ifdef DUST_K
+      double K = DUST_K; //drag coefficient
+    #endif /* #ifdef DUST_K */
+
+    #ifdef DUST_STOKES
+      int p = st_face->ID;
+      double Posx, Posy, Posz, Radius;
+      Posx = st_face->dx;
+      Posy = st_face->dy;
+      Posz = st_face->dz;
+      Radius = sqrt( pow(Posx,2) + pow(Posy,2) + pow(Posz,2));
+
+      double rho_d = st_face->rhodust;
+      double rho_g =  st_face->rho;
+      double Utherm = st_face->press / (st_face->rho * GAMMA_MINUS1);
+      double c_s = sqrt(Utherm  * (GAMMA-1));
+      double K = K_from_stokes(Radius, rho_d, rho_g, FB);
+    #endif /* #ifdef DUST_STOKES */
+
+    #ifdef DUST_SIZE
+      double rho_d = st_face->rhodust;
+      double rho_g =  st_face->rho;
+      double c_s = sqrt(GAMMA * st_face->press / (st_face->rho + FB * st_face->rhodust) );
+      double K = K_from_size(c_s, rho_d, rho_g, FB);
+    #endif /* #ifdef DUST_SIZE */
+
+    rho = st_face->rho + FB * st_face->rhodust;
+
+    v_com[0] = ( st_face->rho * st_face->velx + FB * st_face->rhodust * st_face->velx_dust ) / rho;
+    v_com[1] = ( st_face->rho * st_face->vely + FB * st_face->rhodust * st_face->vely_dust ) / rho;
+    v_com[2] = ( st_face->rho * st_face->velz + FB * st_face->rhodust * st_face->velz_dust ) / rho;
+
+    dV[0] = (velx_dust_0 - velx_0) * exp( - K * rho * dt_half);
+    dV[1] = (vely_dust_0 - vely_0) * exp( - K * rho * dt_half);
+    dV[2] = (velz_dust_0 - velz_0) * exp( - K * rho * dt_half);
+    
+    //Note: delta_time has dW/dt * dt, so we divide by dt here to compute the time derivative.
+    da[0] = ( delta_time->velx_dust / dt_half - delta_time->velx / dt_half) * (1 - exp(- K * rho * dt_half)) / ( K * rho );
+    da[1] = ( delta_time->vely_dust / dt_half - delta_time->vely / dt_half) * (1 - exp(- K * rho * dt_half)) / ( K * rho );
+    da[2] = ( delta_time->velz_dust / dt_half - delta_time->velz / dt_half) * (1 - exp(- K * rho * dt_half)) / ( K * rho );
+    
+    st_face->velx = v_com[0] - FB * st_face->rhodust * (dV[0] + da[0])/rho;
+    st_face->vely = v_com[1] - FB * st_face->rhodust * (dV[1] + da[1])/rho;
+    st_face->velz = v_com[2] - FB * st_face->rhodust * (dV[2] + da[2])/rho;
+
+    st_face->velx_dust = v_com[0] + st_face->rho * (dV[0] + da[0])/rho;
+    st_face->vely_dust = v_com[1] + st_face->rho * (dV[1] + da[1])/rho;
+    st_face->velz_dust = v_com[2] + st_face->rho * (dV[2] + da[2])/rho;
+    
+    // Compare post-drag KE with pre-drag KE to account for heating of gas and maintain energy conservation
+    double KE_after = 0.5 * ( st_face->rho * pow(st_face->velx,2) + 
+                              st_face->rho * pow(st_face->vely,2) + 
+                              st_face->rho * pow(st_face->velz,2) + 
+                              st_face->rhodust * pow(st_face->velx_dust,2) +
+                              st_face->rhodust * pow(st_face->vely_dust,2) +
+                              st_face->rhodust * pow(st_face->velz_dust,2) );
+
+    double delta_press = FB * (GAMMA-1) * (KE_before - KE_after); 
+
+    // Delta_press above is calculated for exact energy conservation.
+    // However, discretisation issues mean delta_press < 0 is possible (even though with perfect integration, it should always be >0)
+    // Where this would lead to negative pressures, we instead make use of the less accurate pressure update following
+    // This makes use of dv_g/dt = K * rho_g * rho_d * (v_d - v_g)
+    if( st_face->press + delta_press< 0)
+    { 
+      double delta_KE = 0.5 * K * ( pow((st_face->velx - st_face->velx_dust ),2) +
+                              pow((st_face->vely - st_face->vely_dust ),2) +
+                              pow((st_face->velz - st_face->velz_dust ),2)) 
+                        * dt_half * st_face->rho * st_face->rhodust;
+      
+      double delta_press_explicit = FB * (GAMMA-1) * delta_KE;
+      st_face->press += delta_press_explicit;
+    }
+    else{
+      st_face->press += delta_press;
+    }
+  }
+#endif /* #ifdef DUST_INCLUDE */
+
+
 }
 
 /*! \brief Adds an extrapolation to state.
@@ -1357,6 +1572,13 @@ void face_add_extrapolation(struct state *st_face, struct state *delta, struct f
   st_face->vely += delta->vely;
   st_face->velz += delta->velz;
   st_face->press += delta->press;
+
+#ifdef DUST_INCLUDE
+  st_face->rhodust += delta->rhodust;
+  st_face->velx_dust += delta->velx_dust;
+  st_face->vely_dust += delta->vely_dust;
+  st_face->velz_dust += delta->velz_dust;
+#endif
 
 #ifdef MHD
 #ifndef ONEDIMS
@@ -1418,6 +1640,17 @@ void face_turn_velocities(struct state *st, struct geometry *geom)
   st->vely = velx * geom->mx + vely * geom->my + velz * geom->mz;
   st->velz = velx * geom->px + vely * geom->py + velz * geom->pz;
 
+#ifdef DUST_INCLUDE
+  double velx_dust, vely_dust, velz_dust;
+  velx_dust = st->velx_dust;
+  vely_dust = st->vely_dust;
+  velz_dust = st->velz_dust;
+
+  st->velx_dust = velx_dust * geom->nx + vely_dust * geom->ny + velz_dust * geom->nz;
+  st->vely_dust = velx_dust * geom->mx + vely_dust * geom->my + velz_dust * geom->mz;
+  st->velz_dust = velx_dust * geom->px + vely_dust * geom->py + velz_dust * geom->pz;
+#endif //DUST_INCLUDE
+
 #ifdef MHD
   double Bx, By, Bz;
 
@@ -1452,6 +1685,13 @@ void solve_advection(struct state *st_L, struct state *st_R, struct state_face *
       st_face->vely  = st_L->vely;
       st_face->velz  = st_L->velz;
       st_face->press = st_L->press;
+
+#ifdef DUST_INCLUDE
+      st_face->rhodust = st_L->rhodust;
+      st_face->velx_dust = st_L->velx_dust;
+      st_face->vely_dust = st_L->vely_dust;
+      st_face->velz_dust = st_L->velz_dust;
+#endif
     }
   else
     {
@@ -1460,6 +1700,12 @@ void solve_advection(struct state *st_L, struct state *st_R, struct state_face *
       st_face->vely  = st_R->vely;
       st_face->velz  = st_R->velz;
       st_face->press = st_R->press;
+#ifdef DUST_INCLUDE
+      st_face->rhodust = st_R->rhodust;
+      st_face->velx_dust = st_R->velx_dust;
+      st_face->vely_dust = st_R->vely_dust;
+      st_face->velz_dust = st_R->velz_dust;
+#endif
     }
 }
 
@@ -1483,6 +1729,17 @@ void face_turnback_velocities(struct state_face *st_face, struct geometry *geom)
   st_face->velx = velx * geom->nx + vely * geom->mx + velz * geom->px;
   st_face->vely = velx * geom->ny + vely * geom->my + velz * geom->py;
   st_face->velz = velx * geom->nz + vely * geom->mz + velz * geom->pz;
+
+#ifdef DUST_INCLUDE
+  double velx_dust, vely_dust, velz_dust;
+  velx_dust = st_face->velx_dust;
+  vely_dust = st_face->vely_dust;
+  velz_dust = st_face->velz_dust;
+
+  st_face->velx_dust = velx_dust * geom->nx + vely_dust * geom->mx + velz_dust * geom->px;
+  st_face->vely_dust = velx_dust * geom->ny + vely_dust * geom->my + velz_dust * geom->py;
+  st_face->velz_dust = velx_dust * geom->nz + vely_dust * geom->mz + velz_dust * geom->pz;
+#endif //DUST_INCLUDE
 }
 
 /*! \brief Sets the scalar states compute the scalar flux from mass flux.
@@ -1561,6 +1818,8 @@ void flux_convert_to_lab_frame(struct state *st_L, struct state *st_R, double *v
   flux->B[2] -= vel_face[2] * Bx;
 #endif /* #ifdef MHD */
 }
+
+
 #endif /* #if defined(RIEMANN_HLLC) || defined(RIEMANN_HLLD) */
 
 /*! \brief Rotates momenum flux and magnetic flux vector.
@@ -1619,6 +1878,16 @@ void face_get_fluxes(struct state *st_L, struct state *st_R, struct state_face *
   flux->momentum[0] = (st_face->rho * st_face->velx * fac + st_face->press * geom->nx);
   flux->momentum[1] = (st_face->rho * st_face->vely * fac + st_face->press * geom->ny);
   flux->momentum[2] = (st_face->rho * st_face->velz * fac + st_face->press * geom->nz);
+
+#ifdef DUST_INCLUDE
+  double fac_dust;  
+  fac_dust = (st_face->velx_dust - vel_face[0]) * geom->nx + (st_face->vely_dust - vel_face[1]) * geom->ny + (st_face->velz_dust - vel_face[2]) * geom->nz;
+
+  flux->dustmass = st_face->rhodust * fac_dust;
+  flux->dustmomentum[0] = st_face->rhodust * st_face->velx_dust * fac_dust;
+  flux->dustmomentum[1] = st_face->rhodust * st_face->vely_dust * fac_dust;
+  flux->dustmomentum[2] = st_face->rhodust * st_face->velz_dust * fac_dust;
+#endif
 
 #ifndef ISOTHERM_EQS
   flux->energy =
@@ -1691,6 +1960,38 @@ void face_limit_fluxes(struct state *st_L, struct state *st_R, struct state *st_
         flux->scalars[i] *= reduc_fac;
 #endif /* #ifdef MAXSCALARS */
     }
+
+#ifdef DUST_INCLUDE
+  if(flux->dustmass > 0)
+    {
+      upwind_mass        = st_L->olddustmass;
+      upwind_activearea  = st_L->activearea;
+      upwind_timebin     = st_L->timeBin;
+      downstream_timebin = st_R->timeBin;
+    }
+  else
+    {
+      upwind_mass        = st_R->olddustmass;
+      upwind_activearea  = st_R->activearea;
+      upwind_timebin     = st_R->timeBin;
+      downstream_timebin = st_L->timeBin;
+    }
+
+  if(upwind_timebin > downstream_timebin)
+    dt *= pow(2, upwind_timebin - downstream_timebin);
+
+  if(fabs(flux->dustmass * dt * upwind_activearea) > 0.9 * upwind_mass)
+    {
+      reduc_fac = 0.9 * upwind_mass / fabs(flux->dustmass * dt * upwind_activearea);
+
+      *count_reduced = *count_reduced + 1.0;
+
+      flux->dustmass *= reduc_fac;
+      flux->dustmomentum[0] *= reduc_fac;
+      flux->dustmomentum[1] *= reduc_fac;
+      flux->dustmomentum[2] *= reduc_fac;
+    }
+#endif /* #ifdef DUST_INCLUDE */
 }
 
 /*! \brief Set flux vector entries to zero.
@@ -1702,10 +2003,20 @@ void face_limit_fluxes(struct state *st_L, struct state *st_R, struct state *st_
 void face_clear_fluxes(struct fluxes *flux)
 {
   flux->mass        = 0;
+
   flux->momentum[0] = 0;
   flux->momentum[1] = 0;
   flux->momentum[2] = 0;
   flux->energy      = 0;
+
+#ifdef DUST_INCLUDE
+  flux->dustmass    = 0;
+
+  flux->dustmomentum[0] = 0;
+  flux->dustmomentum[1] = 0;
+  flux->dustmomentum[2] = 0;
+#endif /* #ifdef DUST_INCLUDE */
+
 #ifdef MHD
   flux->B[0] = 0;
   flux->B[1] = 0;
@@ -1728,9 +2039,18 @@ void face_add_fluxes_advection(struct state_face *st_face, struct fluxes *flux, 
 
   flux->mass += st_face->rho * fac;
 
+
   flux->momentum[0] += st_face->rho * st_face->velx * fac;
   flux->momentum[1] += st_face->rho * st_face->vely * fac;
   flux->momentum[2] += st_face->rho * st_face->velz * fac;
+
+#ifdef DUST_INCLUDE
+   flux->dustmass += st_face->rhodust * fac;
+
+  flux->dustmomentum[0] += st_face->rhodust * st_face->velx_dust * fac;
+  flux->dustmomentum[1] += st_face->rhodust * st_face->vely_dust * fac;
+  flux->dustmomentum[2] += st_face->rhodust * st_face->velz_dust * fac;
+#endif
 
   flux->energy +=
       0.5 * st_face->rho * fac * (st_face->velx * st_face->velx + st_face->vely * st_face->vely + st_face->velz * st_face->velz) +
@@ -1782,7 +2102,7 @@ void apply_flux_list(void)
   if(Send_count[ThisTask] > 0)
     terminate("Send_count[ThisTask]");
 
-  MPI_Alltoall(Send_count, 1, MPI_INT, Recv_count, 1, MPI_INT, MPI_COMM_WORLD);
+  MPI_Alltoall(Send_count, 1, MPI_INT, Recv_count, 1, MPI_INT, MPI_COMM_WORLD); 
 
   for(j = 0, nimport = 0, Recv_offset[0] = 0, Send_offset[0] = 0; j < NTask; j++)
     {
@@ -1815,16 +2135,24 @@ void apply_flux_list(void)
     }
 
   /* apply the fluxes */
-
   for(i = 0; i < nimport; i++)
     {
-      p = FluxListGet[i].index;
+      p = FluxListGet[i].index; 
 
       P[p].Mass += FluxListGet[i].dM;
 
       SphP[p].Momentum[0] += FluxListGet[i].dP[0];
       SphP[p].Momentum[1] += FluxListGet[i].dP[1];
       SphP[p].Momentum[2] += FluxListGet[i].dP[2];
+
+#ifdef DUST_INCLUDE
+      P[p].DustMass += FluxListGet[i].dMD;
+
+      SphP[p].DustMomentum[0] += FluxListGet[i].dPD[0];
+      SphP[p].DustMomentum[1] += FluxListGet[i].dPD[1];
+      SphP[p].DustMomentum[2] += FluxListGet[i].dPD[2];
+#endif /* #ifdef DUST_INCLUDE */
+
 #ifdef MHD
       SphP[p].BConserved[0] += FluxListGet[i].dB[0];
       SphP[p].BConserved[1] += FluxListGet[i].dB[1];
