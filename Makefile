@@ -251,6 +251,13 @@ INCL    += cooling/cooling_vars.h \
 SUBDIRS += cooling
 endif
 
+ifeq (MOD_LOMBARDI_COOLING,$(findstring MOD_LOMBARDI_COOLING,$(CONFIGVARS)))
+OBJS    += cooling/disc_cooling.o
+INCL    += cooling/cooling_vars.h \
+           cooling/disc_cooling_proto.h
+SUBDIRS += cooling
+endif
+
 ifeq (FOF,$(findstring FOF,$(CONFIGVARS)))
 OBJS    += fof/fof.o \
            fof/fof_distribute.o \

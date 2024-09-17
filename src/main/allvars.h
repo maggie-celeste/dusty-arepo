@@ -891,6 +891,11 @@ extern struct global_data_all_processes
   char TreecoolFile[MAXLEN_PATH];
 #endif /* #if defined(COOLING) */
 
+#if defined(MOD_LOMBARDI_COOLING)
+  char LombardiOpacityFile[MAXLEN_PATH];
+  char LombardiPseudoOpacityFile[MAXLEN_PATH];
+#endif /* #if defined(COOLING) */
+
 #ifdef EXACT_GRAVITY_FOR_PARTICLE_TYPE
   int TotPartSpecial, MaxPartSpecial;
 #endif /* #ifdef EXACT_GRAVITY_FOR_PARTICLE_TYPE */
@@ -1328,6 +1333,9 @@ extern struct sph_particle_data
   MyFloat Volume;
   MyFloat OldMass;
 
+#ifdef MOD_LOMBARDI_COOLING
+  MyFloat OldUtherm;    //Used to calculate delta_utherm accounting for hydro/drag etc
+#endif // #ifdef LOMBARDI_COOLING
   /* primitive variables */
   MyFloat Density;
   MyFloat Pressure; /*!< current pressure */
@@ -1394,6 +1402,10 @@ extern struct sph_particle_data
                  density normalized to the hydrogen number density. Gives
                  indirectly ionization state and mean molecular weight. */
 #endif        /* #if defined(COOLING) */
+
+#if defined(MOD_LOMBARDI_COOLING)
+  MyFloat scaleheight;
+#endif        /* #if defined(MOD_LOMBARDI_COOLING) */
 
 #ifdef USE_SFR
   MySingle Sfr;
@@ -1677,6 +1689,7 @@ enum iofields
 
   IO_HIGHRESMASS,
   IO_PRESSURE,
+  IO_SCALEHEIGHT,
   IO_CSND,
   IO_NE,
   IO_NH,

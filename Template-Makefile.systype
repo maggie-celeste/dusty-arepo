@@ -4,6 +4,6 @@
 # system. Don't commit changes to this file unless you add support for
 # a new system.
 
-#SYSTYPE="Darwin"
+SYSTYPE="Ubuntu"
 
 #determine SYSTYPE#

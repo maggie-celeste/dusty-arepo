@@ -408,6 +408,16 @@ void read_parameter_file(char *fname)
       id[nt++] = STRING;
 #endif /* #if defined(COOLING) */
 
+#if defined(MOD_LOMBARDI_COOLING)
+      strcpy(tag[nt], "LombardiOpacityFile");
+      addr[nt] = &All.LombardiOpacityFile;
+      id[nt++] = STRING;
+      strcpy(tag[nt], "LombardiPseudoOpacityFile");
+      addr[nt] = &All.LombardiPseudoOpacityFile;
+      id[nt++] = STRING;
+#endif /* #if defined(MOD_LOMBARDI_COOLING) */
+
+
 #if defined(REFINEMENT)
       strcpy(tag[nt], "ReferenceGasPartMass");
       addr[nt] = &All.ReferenceGasPartMass;

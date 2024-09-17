@@ -31,6 +31,14 @@
 #MHD_POWELL_LIMIT_TIMESTEP     # Timestep constraint due to Powell cleaning scheme
 #MHD_SEEDFIELD                 # Uniform magnetic seed field of specified orientation and strength set up after reading in IC
 
+#---------------------------------------- Dust
+#DUST_INCLUDE
+#DUST_STOKES
+#DUST_K
+#DUST_FB
+#DUST_SIZE
+
+
 #--------------------------------------- Riemann solver; default: exact Riemann solver
 #RIEMANN_HLLC                  # HLLC approximate Riemann solver
 #RIEMANN_HLLD                  # HLLD approximate Riemann solver (required to use for MHD)
@@ -56,6 +64,14 @@
 #ENFORCE_JEANS_STABILITY_OF_CELLS  # this imposes an adaptive floor for the temperature
 #USE_SFR                       # Star formation model, turning dense gas into collisionless partices
 #SFR_KEEP_CELLS                # Do not distroy cell out of which a star has formed
+
+#DISC_COOLING                  # Flag for disc cooling -- either mod lombardi or beta
+#MOD_LOMBARDI_COOLING          # Modified lombardi cooling, as described in Young et al 2024
+#LOMBARDI_TEQ                  # Background temperature of the gas; not set = 5K
+#BETA_COOLING                  # Beta value for beta cooling
+#BETA_COOLING_POWER            # Power law for beta cooling; not set = 0; set to P => beta = beta * (R/R0)^P
+#BETA_COOLING_R0               # R0 for power law for beta cooling; not set => 1AU
+#OUTPUT_SCALEHEIGHT            # set to output scaleheight calculated in mod lombardi routine
 
 #--------------------------------------- Gravity treatment; default: no gravity
 #SELFGRAVITY                   # gravitational intraction between simulation particles/cells

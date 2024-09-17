@@ -407,6 +407,24 @@ void calculate_gradients(void)
     }
 #endif /* #ifdef MHD */
 
+#ifdef MOD_LOMBARDI_COOLING
+for(int idx = 0; idx < TimeBinsHydro.NActiveParticles; idx++)
+    {
+      int i = TimeBinsHydro.ActiveParticleList[idx];
+      if(i < 0)
+        continue;
+
+      double pressure_gradient =  sqrt(SphP[i].Grad.dpress[0] *  SphP[i].Grad.dpress[0] + 
+                                       SphP[i].Grad.dpress[1] *  SphP[i].Grad.dpress[1] +
+                                       SphP[i].Grad.dpress[2] *  SphP[i].Grad.dpress[2]);
+      double H = fabs(SphP[i].Pressure / pressure_gradient);
+      if (H > FLT_MAX){
+            H = FLT_MAX;
+          }
+      SphP[i].scaleheight = H;
+    }
+#endif /* #ifdef LOMBARDI_COOLING */
+
   limit_gradients();
 
 #ifdef REGULARIZE_MESH_CM_DRIFT_USE_SOUNDSPEED

@@ -563,6 +563,16 @@ void init_io_fields()
   init_units(IO_CSND, 0., 0., 0., 0., 1., All.UnitVelocity_in_cm_per_s);
 #endif /* #ifdef OUTPUT_CSND */
 
+
+#ifdef MOD_LOMBARDI_COOLING
+#ifdef OUTPUT_SCALEHEIGHT
+  init_field(IO_SCALEHEIGHT, "H   ", "Scaleheight", MEM_MY_FLOAT, FILE_MY_IO_FLOAT, FILE_NONE, 1, A_SPHP, &SphP[0].scaleheight, 0, GAS_ONLY);
+  init_units(IO_SCALEHEIGHT,  1., -1., 1., 0., 0., All.UnitLength_in_cm);
+#endif /* #ifdef OUTPUT_PRESSURE */
+#endif /* #ifdef MOD_LOMBARDI_COOLING */
+
+
+
 #if defined(COOLING)
   init_field(IO_NE, "NE  ", "ElectronAbundance", MEM_NONE, FILE_MY_IO_FLOAT, FILE_MY_IO_FLOAT, 1, A_NONE, 0, io_func_ne,
              GAS_ONLY);                /* electron abundance */
