@@ -31,7 +31,7 @@ This branch of AREPO has been modified to include dust, modified Lombardi coolin
 
 ## DUST
 
-This code includes an algorithm for dust as a cold, pressureless fluid (Celeste, M et al, submitted). The initial conditions file must include dust masses ("DustMasses") and velocities ("DustVelocities") for each particle in the particle 0 (gas) dataset -- see the create.py file in examples/dustywave for an example of how to set this up.
+This code includes an algorithm for dust as a cold, pressureless fluid (Celeste, M et al, in prep). The initial conditions file must include dust masses ("DustMasses") and velocities ("DustVelocities") for each particle in the particle 0 (gas) dataset -- see the create.py file in examples/dustywave for an example of how to set this up.
 
 The following compile-time options may be added to the Config.sh file:
 
